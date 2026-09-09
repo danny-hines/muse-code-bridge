@@ -1,0 +1,27 @@
+{
+  "name": "muse-bridge",
+  "version": "0.1.0",
+  "description": "Consult, review, and collaborate with your locally authenticated Muse Code from ChatGPT desktop.",
+  "author": {
+    "name": "Muse Bridge contributors"
+  },
+  "repository": "https://github.com/danny-hines/muse-bridge",
+  "homepage": "https://github.com/danny-hines/muse-bridge#readme",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Muse Bridge",
+    "shortDescription": "Bring Muse Code into your desktop conversations.",
+    "longDescription": "Ask Muse for a second opinion, compare approaches, review code, or delegate a coding task through the official local Muse CLI. Persistent sessions preserve follow-up context. Each user signs in to Muse with their own account. Requires a local desktop task, Node.js 22+, and Muse Code 1.0.3+. Independent community integration.",
+    "developerName": "Muse Bridge contributors",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": [
+      "Ask Muse to review my changes and compare its findings with yours.",
+      "Have Muse propose another approach to this problem.",
+      "Ask Muse to critique this plan, then work through the disagreements."
+    ],
+    "brandColor": "#2673E8"
+  },
+  "mcpServers": "./.mcp.json"
+}

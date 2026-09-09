@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "muse": {
+      "cwd": ".",
+      "command": "/bin/sh",
+      "args": ["./scripts/launch.sh"]
+    }
+  }
+}

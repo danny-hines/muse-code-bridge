@@ -1,0 +1,6 @@
+* text=auto
+*.sh text eol=lf
+*.command text eol=lf
+*.mjs text eol=lf
+plugins/muse-bridge/scripts/server.mjs linguist-generated=true
+plugins/muse-bridge/THIRD_PARTY_NOTICES.txt linguist-generated=true
