@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, rename, readdir, realpath, stat } from 'nod
 import { homedir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { MuseHost, uuid7 } from './msp.mjs';
+import { readConnection } from './auth.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES = {
@@ -34,9 +35,10 @@ export function projectItems(items = [], turnId) {
 }
 
 export class MuseBridge {
-  constructor({ dataDir, hostFactory, maxTurnMs = 10 * 60 * 1000 } = {}) {
+  constructor({ dataDir, hostFactory, connection, maxTurnMs = 10 * 60 * 1000 } = {}) {
     this.dataDir = dataDir || process.env.MUSE_BRIDGE_DATA_DIR || join(homedir(), '.local/share/muse-bridge');
     this.hostFactory = hostFactory || (options => new MuseHost(options));
+    this.connection = connection || readConnection();
     this.maxTurnMs = maxTurnMs;
     this.hosts = new Map();
     this.sessions = new Map();
@@ -46,7 +48,7 @@ export class MuseBridge {
   async host(mode) {
     let host = this.hosts.get(mode);
     if (!host || host.closed) {
-      host = this.hostFactory({ mode });
+      host = this.hostFactory({ mode, connection: this.connection });
       this.hosts.set(mode, host);
       host.on('event', (method, params) => {
         const state = this.sessions.get(params.sessionId);
@@ -97,9 +99,12 @@ export class MuseBridge {
     return {
       ready: true, muse_version: host.info.serverInfo.version,
       protocol_version: host.info.schema.version,
-      authentication: 'Managed by the official Muse CLI. META_API_KEY is removed from the child environment.',
+      auth_mode: this.connection.mode,
+      authentication: this.connection.mode === 'account'
+        ? 'Muse-managed stored credentials; inherited META_API_KEY is removed.'
+        : 'Explicit pay-as-you-go API key from a private file, passed only to the Muse child environment.',
       subscription_verified: false,
-      billing_note: 'Muse owns login, plan eligibility, limits, and billing. Model discovery does not verify a subscription. No API-key fallback is implemented by this bridge.',
+      billing_note: 'Muse owns plan eligibility, limits, and billing. Model discovery does not verify a subscription. The bridge never switches authentication modes automatically.',
       catalog,
     };
   }
@@ -123,6 +128,9 @@ export class MuseBridge {
     if (this.loading.has(id)) return this.loading.get(id);
     const promise = (async () => {
       const record = await this.record(id);
+      if ((record.auth_mode || 'account') !== this.connection.mode) {
+        throw new Error('This session used a different authentication mode. Restore that mode and restart the host, or start a new session.');
+      }
       const host = await this.host(record.mode);
       const state = this.newState(record, host);
       try {
@@ -156,7 +164,7 @@ export class MuseBridge {
     const mode = role === 'code' ? 'code' : 'read-only';
     const host = await this.host(mode);
     const id = uuid7();
-    const record = { session_id: id, workspace: root, role, mode, created_at: new Date().toISOString() };
+    const record = { session_id: id, workspace: root, role, mode, auth_mode: this.connection.mode, created_at: new Date().toISOString() };
     // Save the identity before admission so an uncertain acknowledgement can be recovered.
     await this.save(record);
     const state = this.newState(record, host);

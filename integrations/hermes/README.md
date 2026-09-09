@@ -2,6 +2,8 @@
 
 This integration adds Muse as an MCP collaborator to Hermes. It does not replace the selected Hermes model or install Hermes itself.
 
+Use Muse-managed account credentials (the default), or add `--auth api-key --api-key-file /absolute/private/file` for explicit pay-as-you-go access. Both modes use the Muse Code agent. See [authentication setup](../../README.md#login-and-subscription) and the [access comparison](../../docs/access-options.md).
+
 ```sh
 ./install.sh --host hermes
 ```

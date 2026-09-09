@@ -6,6 +6,8 @@ Ask Muse Code for an independent review, a competing approach, or an implementat
 
 From the repository checkout, run `./install.sh --host codex`. Use `--login` to sign in through the official Muse CLI, or `--check` for a read-only preflight. The root [README](https://github.com/danny-hines/muse-code-bridge#readme) also provides a curl bootstrap that installs missing dependencies.
 
+Muse-managed account credentials are the default; subscription use relies on Muse's onboarding and active plan. For explicit pay-as-you-go access, add `--auth api-key --api-key-file /absolute/private/file`. Both modes use the Muse Code agent. See [authentication setup](https://github.com/danny-hines/muse-code-bridge#login-and-subscription) and the [access comparison](https://github.com/danny-hines/muse-code-bridge/blob/main/docs/access-options.md).
+
 Start a **new local conversation** in your project, enable **Muse Code Bridge** in the plugins picker, and ask:
 
 > Ask Muse to review my changes, then compare its findings with yours.

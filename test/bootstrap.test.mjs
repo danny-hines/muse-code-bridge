@@ -75,7 +75,7 @@ if(!file){console.error('Unexpected download: '+url);process.exit(22)}
 fs.copyFileSync(file,args[args.indexOf('--output')+1]);
 `, { mode: 0o755 });
   const env = {
-    ...process.env, PATH: bin + ':' + process.env.PATH, MUSE_BRIDGE_ROOT: root,
+    ...process.env, PATH: bin + ':' + process.env.PATH, MUSE_BRIDGE_ROOT: root, MUSE_BRIDGE_CONNECTION_FILE: join(root, 'connection.json'),
     MUSE_BRIDGE_NODE_BIN: missing ? join(dir, 'absent-node') : process.execPath,
     MUSE_BRIDGE_EXECUTABLE: missing ? join(dir, 'absent-muse') : muse,
     MUSE_BRIDGE_CODEX_BIN: missing ? join(dir, 'absent-codex') : codex,
@@ -102,6 +102,20 @@ test('piped bootstrap reuses existing tools, downloads pinned source, and cleans
   assert.ok(!calls.some(c => c.tool === 'npm' || c.args[0] === 'login'));
   assert.ok(calls.some(c => c.tool === 'codex' && c.args[1] === 'add' && c.args[2] === 'muse-codex-bridge@muse-code-bridge'));
   assert.equal(await exists(join(s.root, '.bootstrap-lock')), false);
+});
+
+test('API bootstrap preserves its selection on reruns and never launches account login', async t => {
+  const s = await setup(t, { missing: true });
+  const key = join(s.dir, 'key');
+  await writeFile(key, 'fixture-key', { mode: 0o600 });
+  await s.run('--host', 'hermes', '--auth', 'api-key', '--api-key-file', key);
+  assert.equal(JSON.parse(await readFile(s.env.MUSE_BRIDGE_CONNECTION_FILE)).mode, 'api-key');
+  s.env.MUSE_BRIDGE_NODE_BIN = join(s.root, 'runtime/bin/node');
+  s.env.MUSE_BRIDGE_EXECUTABLE = join(s.root, 'runtime/bin/muse');
+  await s.run('--host', 'hermes');
+  assert.equal(JSON.parse(await readFile(s.env.MUSE_BRIDGE_CONNECTION_FILE)).mode, 'api-key');
+  assert.ok(!(await s.calls()).some(c => c.args[0] === 'login'));
+  await assert.rejects(s.run('--host', 'hermes', '--login'), /cannot be used in API mode/);
 });
 
 test('fresh-machine bootstrap installs Node, Muse, and Codex without modifying system tools', async t => {

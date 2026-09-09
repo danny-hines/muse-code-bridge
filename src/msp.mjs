@@ -4,6 +4,7 @@ import { accessSync, constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, delimiter } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { readConnection } from './auth.mjs';
 
 export function uuid7() {
   const bytes = randomBytes(16);
@@ -25,20 +26,25 @@ export function findMuse(env = process.env) {
   throw new Error('Muse CLI was not found. Install Muse Code from Meta, then sign in with muse login. Set MUSE_BRIDGE_EXECUTABLE if it is installed elsewhere.');
 }
 
-export function museEnvironment(env = process.env) {
+export function museEnvironment(env = process.env, connection = { mode: 'account' }) {
   const result = { ...env };
   // The official CLI documents that this key overrides a Meta account login.
   // Do not turn subscription requests into implicit API-key requests.
   delete result.META_API_KEY;
+  if (connection.mode === 'api-key') {
+    if (!connection.apiKey) throw new Error('API mode has no credential. No account fallback was attempted.');
+    result.META_API_KEY = connection.apiKey;
+  } else if (connection.mode !== 'account') throw new Error('Unknown authentication mode.');
   return result;
 }
 
 export class MuseHost extends EventEmitter {
-  constructor({ mode = 'read-only', executable, env = process.env, timeoutMs = 15000 } = {}) {
+  constructor({ mode = 'read-only', executable, env = process.env, connection, timeoutMs = 15000 } = {}) {
     super();
     this.mode = mode;
     this.executable = executable;
     this.env = env;
+    this.connection = connection || readConnection(env);
     this.timeoutMs = timeoutMs;
     this.pending = new Map();
     this.nextId = 0;
@@ -56,7 +62,7 @@ export class MuseHost extends EventEmitter {
     const args = ['serve'];
     if (this.mode === 'read-only') args.push('--disable-shell', '--disable-write');
     this.child = spawn(this.executable || findMuse(this.env), args, {
-      env: museEnvironment(this.env), stdio: ['pipe', 'pipe', 'pipe'],
+      env: museEnvironment(this.env, this.connection), stdio: ['pipe', 'pipe', 'pipe'],
     });
     // Never forward raw CLI stderr; it can contain personal paths or auth details.
     this.child.stderr.on('data', () => {});

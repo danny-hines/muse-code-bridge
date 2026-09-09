@@ -21434,16 +21434,80 @@ var StdioServerTransport = class {
 
 // src/bridge.mjs
 import { mkdir, readFile, writeFile, rename, readdir, realpath, stat } from "node:fs/promises";
-import { homedir as homedir2 } from "node:os";
-import { join as join2, isAbsolute } from "node:path";
+import { homedir as homedir3 } from "node:os";
+import { join as join3, isAbsolute as isAbsolute2 } from "node:path";
 
 // src/msp.mjs
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { accessSync, constants } from "node:fs";
-import { homedir } from "node:os";
-import { join, delimiter } from "node:path";
+import { homedir as homedir2 } from "node:os";
+import { join as join2, delimiter } from "node:path";
 import { randomBytes } from "node:crypto";
+
+// src/auth.mjs
+import { openSync, closeSync, fstatSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, join } from "node:path";
+function connectionPath(env = process.env) {
+  const path = env.MUSE_BRIDGE_CONNECTION_FILE || join(env.MUSE_BRIDGE_ROOT || join(homedir(), ".local/share/muse-bridge"), "connection.json");
+  if (!isAbsolute(path)) throw new Error("The bridge connection file must have an absolute path.");
+  return path;
+}
+function validateConfig(config2) {
+  if (!config2 || config2.version !== 1 || !["account", "api-key"].includes(config2.mode) || Object.keys(config2).some((key) => !["version", "mode", "api_key_file"].includes(key))) {
+    throw new Error("Invalid bridge connection settings. Expected version 1 and account or api-key mode.");
+  }
+  if (config2.mode === "api-key" && (typeof config2.api_key_file !== "string" || !isAbsolute(config2.api_key_file))) {
+    throw new Error("API mode requires --api-key-file with an absolute path to a private key file.");
+  }
+  if (config2.mode === "account" && config2.api_key_file !== void 0) throw new Error("Account mode cannot specify an API key file.");
+  return config2;
+}
+function readConfig(env = process.env) {
+  let text;
+  try {
+    text = readFileSync(connectionPath(env), "utf8");
+  } catch (error2) {
+    if (error2.code === "ENOENT") return { version: 1, mode: "account" };
+    throw new Error("Cannot read bridge connection settings.");
+  }
+  let config2;
+  try {
+    config2 = JSON.parse(text);
+  } catch {
+    throw new Error("Invalid JSON in bridge connection settings.");
+  }
+  return validateConfig(config2);
+}
+function resolveConnection(config2) {
+  validateConfig(config2);
+  const connection = { mode: config2.mode };
+  if (config2.mode === "api-key") {
+    let fd;
+    let key;
+    try {
+      fd = openSync(config2.api_key_file, "r");
+      const info = fstatSync(fd);
+      if (!info.isFile() || info.size > 65536 || info.mode & 63 || process.getuid && info.uid !== process.getuid()) {
+        throw new Error("unsafe");
+      }
+      key = readFileSync(fd, "utf8").trim();
+      if (!key || /\s/.test(key)) throw new Error("invalid");
+    } catch {
+      throw new Error("Cannot use the API key file. It must be a readable file owned by you, private (chmod 600), and contain only the key. No account fallback was attempted.");
+    } finally {
+      if (fd !== void 0) closeSync(fd);
+    }
+    Object.defineProperty(connection, "apiKey", { value: key, enumerable: false });
+  }
+  return Object.freeze(connection);
+}
+function readConnection(env = process.env) {
+  return resolveConnection(readConfig(env));
+}
+
+// src/msp.mjs
 function uuid7() {
   const bytes = randomBytes(16);
   bytes.writeUIntBE(Date.now(), 0, 6);
@@ -21454,10 +21518,10 @@ function uuid7() {
 }
 function findMuse(env = process.env) {
   const candidates = env.MUSE_BRIDGE_EXECUTABLE ? [env.MUSE_BRIDGE_EXECUTABLE] : [
-    join(homedir(), ".local/bin/muse"),
+    join2(homedir2(), ".local/bin/muse"),
     "/opt/homebrew/bin/muse",
     "/usr/local/bin/muse",
-    ...(env.PATH || "").split(delimiter).filter(Boolean).map((p) => join(p, "muse"))
+    ...(env.PATH || "").split(delimiter).filter(Boolean).map((p) => join2(p, "muse"))
   ];
   for (const file of candidates) {
     try {
@@ -21468,17 +21532,22 @@ function findMuse(env = process.env) {
   }
   throw new Error("Muse CLI was not found. Install Muse Code from Meta, then sign in with muse login. Set MUSE_BRIDGE_EXECUTABLE if it is installed elsewhere.");
 }
-function museEnvironment(env = process.env) {
+function museEnvironment(env = process.env, connection = { mode: "account" }) {
   const result = { ...env };
   delete result.META_API_KEY;
+  if (connection.mode === "api-key") {
+    if (!connection.apiKey) throw new Error("API mode has no credential. No account fallback was attempted.");
+    result.META_API_KEY = connection.apiKey;
+  } else if (connection.mode !== "account") throw new Error("Unknown authentication mode.");
   return result;
 }
 var MuseHost = class extends EventEmitter {
-  constructor({ mode = "read-only", executable, env = process.env, timeoutMs = 15e3 } = {}) {
+  constructor({ mode = "read-only", executable, env = process.env, connection, timeoutMs = 15e3 } = {}) {
     super();
     this.mode = mode;
     this.executable = executable;
     this.env = env;
+    this.connection = connection || readConnection(env);
     this.timeoutMs = timeoutMs;
     this.pending = /* @__PURE__ */ new Map();
     this.nextId = 0;
@@ -21494,7 +21563,7 @@ var MuseHost = class extends EventEmitter {
     const args = ["serve"];
     if (this.mode === "read-only") args.push("--disable-shell", "--disable-write");
     this.child = spawn(this.executable || findMuse(this.env), args, {
-      env: museEnvironment(this.env),
+      env: museEnvironment(this.env, this.connection),
       stdio: ["pipe", "pipe", "pipe"]
     });
     this.child.stderr.on("data", () => {
@@ -21617,9 +21686,10 @@ function projectItems(items = [], turnId) {
   });
 }
 var MuseBridge = class {
-  constructor({ dataDir, hostFactory, maxTurnMs = 10 * 60 * 1e3 } = {}) {
-    this.dataDir = dataDir || process.env.MUSE_BRIDGE_DATA_DIR || join2(homedir2(), ".local/share/muse-bridge");
+  constructor({ dataDir, hostFactory, connection, maxTurnMs = 10 * 60 * 1e3 } = {}) {
+    this.dataDir = dataDir || process.env.MUSE_BRIDGE_DATA_DIR || join3(homedir3(), ".local/share/muse-bridge");
     this.hostFactory = hostFactory || ((options) => new MuseHost(options));
+    this.connection = connection || readConnection();
     this.maxTurnMs = maxTurnMs;
     this.hosts = /* @__PURE__ */ new Map();
     this.sessions = /* @__PURE__ */ new Map();
@@ -21628,7 +21698,7 @@ var MuseBridge = class {
   async host(mode) {
     let host = this.hosts.get(mode);
     if (!host || host.closed) {
-      host = this.hostFactory({ mode });
+      host = this.hostFactory({ mode, connection: this.connection });
       this.hosts.set(mode, host);
       host.on("event", (method, params) => {
         const state = this.sessions.get(params.sessionId);
@@ -21661,7 +21731,7 @@ var MuseBridge = class {
   }
   async save(record2) {
     await mkdir(this.dataDir, { recursive: true, mode: 448 });
-    const path = join2(this.dataDir, record2.session_id + ".json");
+    const path = join3(this.dataDir, record2.session_id + ".json");
     const temp = path + "." + uuid7() + ".tmp";
     await writeFile(temp, JSON.stringify(record2, null, 2) + "\n", { mode: 384 });
     await rename(temp, path);
@@ -21670,7 +21740,7 @@ var MuseBridge = class {
     if (!UUID.test(id)) throw new Error("Invalid session ID.");
     let record2;
     try {
-      record2 = JSON.parse(await readFile(join2(this.dataDir, id + ".json"), "utf8"));
+      record2 = JSON.parse(await readFile(join3(this.dataDir, id + ".json"), "utf8"));
     } catch {
       throw new Error("Session is not registered with Muse Bridge on this machine. Use muse_sessions to find a bridge session.");
     }
@@ -21684,9 +21754,10 @@ var MuseBridge = class {
       ready: true,
       muse_version: host.info.serverInfo.version,
       protocol_version: host.info.schema.version,
-      authentication: "Managed by the official Muse CLI. META_API_KEY is removed from the child environment.",
+      auth_mode: this.connection.mode,
+      authentication: this.connection.mode === "account" ? "Muse-managed stored credentials; inherited META_API_KEY is removed." : "Explicit pay-as-you-go API key from a private file, passed only to the Muse child environment.",
       subscription_verified: false,
-      billing_note: "Muse owns login, plan eligibility, limits, and billing. Model discovery does not verify a subscription. No API-key fallback is implemented by this bridge.",
+      billing_note: "Muse owns plan eligibility, limits, and billing. Model discovery does not verify a subscription. The bridge never switches authentication modes automatically.",
       catalog
     };
   }
@@ -21707,6 +21778,9 @@ var MuseBridge = class {
     if (this.loading.has(id)) return this.loading.get(id);
     const promise = (async () => {
       const record2 = await this.record(id);
+      if ((record2.auth_mode || "account") !== this.connection.mode) {
+        throw new Error("This session used a different authentication mode. Restore that mode and restart the host, or start a new session.");
+      }
       const host = await this.host(record2.mode);
       const state = this.newState(record2, host);
       try {
@@ -21742,14 +21816,14 @@ var MuseBridge = class {
     state.timer.unref();
   }
   async start({ prompt, workspace, role = "consult", model, reasoning_effort }) {
-    if (!isAbsolute(workspace)) throw new Error("workspace must be an absolute directory path.");
+    if (!isAbsolute2(workspace)) throw new Error("workspace must be an absolute directory path.");
     const root = await realpath(workspace);
     if (!(await stat(root)).isDirectory()) throw new Error("workspace must be a directory.");
     if (!ROLES[role]) throw new Error("Unknown collaboration role.");
     const mode = role === "code" ? "code" : "read-only";
     const host = await this.host(mode);
     const id = uuid7();
-    const record2 = { session_id: id, workspace: root, role, mode, created_at: (/* @__PURE__ */ new Date()).toISOString() };
+    const record2 = { session_id: id, workspace: root, role, mode, auth_mode: this.connection.mode, created_at: (/* @__PURE__ */ new Date()).toISOString() };
     await this.save(record2);
     const state = this.newState(record2, host);
     try {
@@ -21884,8 +21958,9 @@ Do not retry uncertain submissions automatically. Attribute Muse's findings and 
 Inspect pending approvals and resolve them only within existing user authorization and host policy.
 Ask the user for missing information and relay it with muse_answer. Never invent an approval or answer.
 Host browser evidence can be sent to Muse; Muse does not automatically receive the host's tools or full chat.
-Each user signs in through the official Muse CLI. Model discovery is not proof of subscription eligibility.
-Never request credentials in chat or switch to an API key. Use muse_cancel when the user asks to stop.`;
+Authentication is chosen during setup: Muse-managed account credentials or an explicit pay-as-you-go key.
+Read auth_mode in muse_status; model discovery is not proof of subscription eligibility.
+Never request credentials in chat or change billing routes as a fallback. Use muse_cancel when the user asks to stop.`;
 
 // src/server.mjs
 var bridge = new MuseBridge();

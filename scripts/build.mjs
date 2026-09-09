@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 await mkdir('plugins/muse-codex-bridge/scripts', { recursive: true });
 await mkdir('dist', { recursive: true });
 const result = await build({
-  entryPoints: { 'muse-server': 'src/server.mjs', 'configure-host': 'scripts/configure-host.mjs' },
+  entryPoints: { 'muse-server': 'src/server.mjs', 'configure-host': 'scripts/configure-host.mjs', 'configure-auth': 'scripts/configure-auth.mjs' },
   outdir: 'dist', outExtension: { '.js': '.mjs' },
   bundle: true, platform: 'node', format: 'esm', target: 'node22',
   mainFields: ['module', 'main'],

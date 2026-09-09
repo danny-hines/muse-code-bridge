@@ -1,6 +1,6 @@
 {
   "name": "muse-codex-bridge",
-  "version": "0.1.0",
+  "version": "0.1.0+codex.20260909010827",
   "description": "Consult, review, and collaborate with your locally authenticated Muse Code from ChatGPT desktop.",
   "author": {
     "name": "Muse Code Bridge contributors"
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Muse Code Bridge",
     "shortDescription": "Bring Muse Code into your desktop conversations.",
-    "longDescription": "Ask Muse for a second opinion, compare approaches, review code, or delegate a coding task through the official local Muse CLI. Persistent sessions preserve follow-up context. Each user signs in to Muse with their own account. Requires a local desktop task, Node.js 22+, and Muse Code 1.0.3+. Independent community integration.",
+    "longDescription": "Ask Muse for a second opinion, compare approaches, review code, or delegate a coding task through the official local Muse CLI. Persistent sessions preserve follow-up context. Use your Muse-managed account credentials or explicitly configure a pay-as-you-go API key. Requires a local desktop task, Node.js 22+, and Muse Code 1.0.3+. Independent community integration.",
     "developerName": "Muse Code Bridge contributors",
     "category": "Productivity",
     "capabilities": [

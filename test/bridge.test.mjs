@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MuseBridge, projectItems } from '../src/bridge.mjs';
@@ -48,7 +48,7 @@ async function setup(t, options = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'muse-bridge-test-'));
   const db = new Map(); const hosts = [];
   const hostFactory = opts => { const host = new FakeHost(opts, db); hosts.push(host); return host; };
-  const bridge = new MuseBridge({ dataDir: join(directory, 'state'), hostFactory, ...options });
+  const bridge = new MuseBridge({ dataDir: join(directory, 'state'), hostFactory, connection: { mode: 'account' }, ...options });
   t.after(async () => { bridge.close(); await rm(directory, { recursive: true, force: true }); });
   return { bridge, directory, db, hosts, hostFactory };
 }
@@ -84,11 +84,35 @@ test('session mode and last completed turn survive a bridge restart', async t =>
   const { bridge, directory, hosts, hostFactory } = await setup(t);
   const run = await bridge.start({ prompt: 'review', workspace: directory });
   hosts[0].finish(run.session_id); bridge.close();
-  const resumed = new MuseBridge({ dataDir: join(directory, 'state'), hostFactory });
+  const resumed = new MuseBridge({ dataDir: join(directory, 'state'), hostFactory, connection: { mode: 'account' } });
   t.after(() => resumed.close());
   const result = await resumed.poll({ session_id: run.session_id });
   assert.equal(result.status, 'completed'); assert.equal(result.turn_id, run.turn_id);
   assert.equal(result.mode, 'read-only'); assert.equal(hosts.at(-1).mode, 'read-only');
+});
+
+test('persisted and legacy sessions reject a different authentication mode before starting Muse', async t => {
+  const { bridge, directory, hosts, hostFactory } = await setup(t);
+  const run = await bridge.start({ prompt: 'review', workspace: directory });
+  hosts[0].finish(run.session_id); bridge.close();
+  const api = new MuseBridge({ dataDir: join(directory, 'state'), hostFactory, connection: { mode: 'api-key' } });
+  t.after(() => api.close());
+  await assert.rejects(api.send({ session_id: run.session_id, message: 'follow up' }), /different authentication mode/);
+  assert.equal(hosts.length, 1);
+  const path = join(directory, 'state', run.session_id + '.json');
+  const record = JSON.parse(await readFile(path)); delete record.auth_mode;
+  await writeFile(path, JSON.stringify(record));
+  await assert.rejects(api.poll({ session_id: run.session_id }), /different authentication mode/);
+  assert.equal(hosts.length, 1);
+});
+
+test('API status and session records identify the route without exposing a credential', async t => {
+  const { bridge, directory } = await setup(t, { connection: { mode: 'api-key', apiKey: 'fixture-secret' } });
+  const status = await bridge.status();
+  const run = await bridge.start({ prompt: 'review', workspace: directory });
+  assert.equal(status.auth_mode, 'api-key');
+  assert.equal(run.auth_mode, 'api-key');
+  assert.ok(!JSON.stringify([status, run, await bridge.list()]).includes('fixture-secret'));
 });
 
 test('stale approval stages and persistent approvals cannot execute', async t => {

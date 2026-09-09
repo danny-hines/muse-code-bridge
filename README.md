@@ -1,6 +1,6 @@
 # Muse Code Bridge
 
-Call your locally authenticated Muse Code from **Codex / ChatGPT desktop, Hermes, or OpenCode**. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation.
+Call Muse Code from **Codex / ChatGPT desktop, Hermes, or OpenCode**, using your Muse Code subscription or an explicit pay-as-you-go API key. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation.
 
 One shared MCP server connects to the official `muse serve` process. Each host gets its own installer and instructions. **Muse is a collaborator, not a new entry in your host's model picker.** The host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse.
 
@@ -9,8 +9,6 @@ Community integration, built against Muse Code **1.0.3 (1.0.3-R2198.1)** and Mus
 ## Install
 
 Repository: [danny-hines/muse-code-bridge](https://github.com/danny-hines/muse-code-bridge).
-
-**Publication status:** the repository is prepared locally; the GitHub links and curl commands become usable after publication.
 
 Run on the computer where you use your host app. Codex is the default:
 
@@ -81,11 +79,38 @@ bash /tmp/muse-code-bridge-bootstrap.sh --host codex
 
 ## Login and subscription
 
-Muse owns authentication, plan eligibility, billing, and usage limits. Sign in using the official `muse login` browser flow. No OpenAI API key is needed for this bridge. It removes inherited `META_API_KEY` before launching Muse because the CLI documents that variable as overriding account login. The bridge does not extract tokens or implement a separate API-key fallback.
+Setup supports two explicit authentication choices:
+
+| Choice | Setup | Credential used by the official Muse CLI |
+|---|---|---|
+| Muse-managed account (default) | `--auth account`, optionally `--login` | Existing Muse credentials, including the credential connected during subscription onboarding |
+| Pay-as-you-go API | `--auth api-key --api-key-file /absolute/private/file` | An additional Meta Model API key you supply; no subscription required |
+
+Omitting `--auth` preserves the saved choice on updates. Both modes run the official Muse Code CLI. This is not a raw API proxy. No OpenAI API key is needed for the bridge; your host's own model usage is separate.
+
+Meta says the subscription applies to the Muse Code credential connected during CLI onboarding. **Additional API keys are billed pay-as-you-go**, and the subscription credential is for Muse Code only. The bridge leaves Muse's credential store intact and does not extract subscription tokens. In account mode it removes inherited `META_API_KEY` because that variable takes precedence over stored credentials. Stored API keys also take precedence over stored browser sessions, so account mode cannot independently guarantee subscription billing. [Subscriptions](https://dev.meta.ai/docs/muse-code/subscriptions), [authentication precedence](https://dev.meta.ai/docs/muse-code/auth).
 
 A successful request establishes that the official Muse CLI route works. It **does not independently establish which billing entitlement Muse used**. The protocol's model catalog is not an account/subscription-status endpoint. Check your active plan and any stored provider configuration in Muse. The status tool reports this distinction explicitly.
 
 Each person uses their own Muse account. Sharing the plugin shares no credentials, sessions, account configuration, or subscription. Prompts and any context Muse reads are processed under the user's Muse settings and terms.
+
+### Use an API key
+
+Create an additional pay-as-you-go key in your [Meta Model API account](https://dev.meta.ai/). Save only that key in a file outside the repository, for example `~/.config/muse-code-bridge/meta-api-key`. Keep it private with `chmod 600` and install:
+
+```sh
+chmod 600 "$HOME/.config/muse-code-bridge/meta-api-key"
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- \
+  --host codex --auth api-key --api-key-file "$HOME/.config/muse-code-bridge/meta-api-key"
+```
+
+Use the same flags with `./install.sh`, or select Hermes/OpenCode with `--host`. To change just authentication later, run `node dist/configure-auth.mjs --auth …` from the checkout. To return to Muse-managed credentials, use `--auth account`. Restart every host using the bridge after changing the choice or rotating the key.
+
+Only the mode and key-file path are saved in `~/.local/share/muse-bridge/connection.json`. The key stays in your private file and is read at server startup, then passed to the Muse child as `META_API_KEY`; it is never placed in command arguments or host configuration. API mode ignores any different inherited key, skips optional account login, and fails if the selected file is missing or unsafe. It never falls back to another credential route. Existing sessions require their original authentication mode when resumed; this pins the mode, not the identity or entitlement of the Muse account.
+
+The choice is shared across hosts using that connection file. Advanced setups can set `MUSE_BRIDGE_CONNECTION_FILE` to a separate absolute path in each host's MCP environment; `MUSE_BRIDGE_ROOT` also relocates the default file. A shell-only override will not automatically reach a desktop process. Keep keys outside managed source, and never put them in a prompt or commit them.
+
+Choosing API authentication does **not** choose a Contributor model. Ask the host to use the exact Contributor model ID returned by `muse_status` if that is what you want; omitted models use Muse's default. Contributor data-use terms still apply. See the [subscription, API, and OpenCode comparison](docs/access-options.md) for current prices and the free OpenCode alternative.
 
 ## Tools
 
@@ -128,8 +153,9 @@ The shell installers target macOS and Linux, arm64 and x64. They need `bash`, `c
 
 - The official Muse process has passed a real two-turn conversation and session-resume check on macOS.
 - The bundled MCP server is verified through an MCP SDK client; the Codex plugin is installed locally.
-- All 39 automated tests pass. Hermes/OpenCode configuration and installer paths are exercised in isolated tests, including OpenCode 1 and 2 layouts. Their generated launch commands have also connected to the real Muse CLI through an MCP SDK client. Those desktop apps have not been exercised end to end.
-- Fresh dependency installation is tested with download/process fixtures. GitHub CI is configured for macOS and Linux; it has not run until publication.
+- Automated tests cover the protocol, authentication separation, session resumes, and installers, including OpenCode 1 and 2 layouts. Hermes/OpenCode generated launch commands have also connected to the real Muse CLI through an MCP SDK client. Those desktop apps have not been exercised end to end.
+- API credential handling is tested with fake keys and processes; no paid API request has been used to validate that mode.
+- Fresh dependency installation is tested with download/process fixtures. [GitHub CI](https://github.com/danny-hines/muse-code-bridge/actions/workflows/ci.yml) builds and tests on macOS and Linux.
 
 ## Develop
 

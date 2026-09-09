@@ -29,7 +29,7 @@ if (args.includes('--help')) process.exit(0);
 if (args[0] === 'plugin' && args[1] === 'list') console.log(process.env.INSTALL_TEST_INSTALLED || '{"installed":[]}');
 if (process.env.INSTALL_TEST_FAIL_ADD && args[1] === 'marketplace' && args[2] === 'add') process.exit(9);
 `, { mode: 0o755 });
-  const env = { ...process.env, MUSE_BRIDGE_NODE_BIN: process.execPath, MUSE_BRIDGE_CODEX_BIN: fakeCodex, MUSE_BRIDGE_EXECUTABLE: fakeMuse, INSTALL_TEST_LOG: log, ...overrides };
+  const env = { ...process.env, MUSE_BRIDGE_CONNECTION_FILE: join(dir, 'connection.json'), MUSE_BRIDGE_NODE_BIN: process.execPath, MUSE_BRIDGE_CODEX_BIN: fakeCodex, MUSE_BRIDGE_EXECUTABLE: fakeMuse, INSTALL_TEST_LOG: log, ...overrides };
   t.after(() => rm(dir, { recursive: true, force: true }));
   return {
     dir, env,
@@ -92,7 +92,18 @@ test('installation works from a checkout path containing spaces', async t => {
   await cp(join(repository, 'plugins'), join(checkout, 'plugins'), { recursive: true });
   await cp(join(repository, 'integrations'), join(checkout, 'integrations'), { recursive: true });
   await cp(join(repository, '.agents'), join(checkout, '.agents'), { recursive: true });
+  await cp(join(repository, 'dist'), join(checkout, 'dist'), { recursive: true });
   await cp(join(repository, 'install.sh'), join(checkout, 'install.sh'));
   await exec('/bin/sh', [join(checkout, 'install.sh')], { env: s.env });
   assert.ok((await s.calls()).some(c => c.args[2] === 'add' && c.args[3] === checkout));
+});
+
+test('API installation persists a file reference and cannot trigger account login', async t => {
+  const s = await setup(t);
+  const key = join(s.dir, 'key');
+  await writeFile(key, 'fixture-key', { mode: 0o600 });
+  await assert.rejects(s.run('--auth', 'api-key', '--api-key-file', key, '--login'), /cannot be used/);
+  await s.run('--auth', 'api-key', '--api-key-file', key);
+  assert.equal(JSON.parse(await readFile(s.env.MUSE_BRIDGE_CONNECTION_FILE)).mode, 'api-key');
+  assert.ok(!(await s.calls()).some(c => c.args[0] === 'login'));
 });

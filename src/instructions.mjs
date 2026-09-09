@@ -9,5 +9,6 @@ Do not retry uncertain submissions automatically. Attribute Muse's findings and 
 Inspect pending approvals and resolve them only within existing user authorization and host policy.
 Ask the user for missing information and relay it with muse_answer. Never invent an approval or answer.
 Host browser evidence can be sent to Muse; Muse does not automatically receive the host's tools or full chat.
-Each user signs in through the official Muse CLI. Model discovery is not proof of subscription eligibility.
-Never request credentials in chat or switch to an API key. Use muse_cancel when the user asks to stop.`;
+Authentication is chosen during setup: Muse-managed account credentials or an explicit pay-as-you-go key.
+Read auth_mode in muse_status; model discovery is not proof of subscription eligibility.
+Never request credentials in chat or change billing routes as a fallback. Use muse_cancel when the user asks to stop.`;

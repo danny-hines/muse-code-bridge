@@ -5,13 +5,18 @@ main() {
   umask 077
   local root="${MUSE_BRIDGE_ROOT:-$HOME/.local/share/muse-bridge}"
   local ref=main login=auto node_bin muse_bin codex_bin="" npm_bin work os arch archive expected actual
-  local wants_codex=false opencode_version=auto
+  local wants_codex=false opencode_version=auto auth='' key_file='' effective_auth
   local -a host_args=()
+  local -a auth_check_args=(--print-mode)
   local node_base=https://nodejs.org/dist/latest-v22.x
   local repository=danny-hines/muse-code-bridge
   local arg
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
+      --auth|--api-key-file)
+        [[ "$#" -ge 2 && -n "$2" && "$2" != --* ]] || { echo "$1 requires a value." >&2; return 2; }
+        if [[ "$1" = --auth ]]; then auth="$2"; else key_file="$2"; fi
+        shift ;;
       --host)
         [[ "$#" -ge 2 ]] || { echo '--host needs codex, hermes, or opencode.' >&2; return 2; }
         case "$2" in codex) wants_codex=true ;; hermes|opencode) ;; *) echo "Unknown host: $2" >&2; return 2 ;; esac
@@ -30,6 +35,9 @@ main() {
           'Existing compatible tools are reused. No sudo or shell-profile edits.' \
           '--opencode-version auto|1|2: use 2 for the beta; default auto.' \
           '--login: always run Muse login. --no-login: skip optional login.' \
+          '--auth account|api-key: choose Muse-managed credentials or explicit API billing.' \
+          '--api-key-file /absolute/private/file: required with --auth api-key; only the path is saved.' \
+          'Omit --auth to preserve the current choice (account on a fresh install).' \
           'MUSE_BRIDGE_REF selects a Git ref (default main). MUSE_BRIDGE_ROOT changes the local install root.'
         return 0 ;;
       *) printf 'Unknown option: %s\n' "$1" >&2; return 2 ;;
@@ -37,6 +45,11 @@ main() {
     shift
   done
   if [[ "${#host_args[@]}" -eq 0 ]]; then host_args=(--host codex); wants_codex=true; fi
+  case "$auth" in ''|account|api-key) ;; *) echo '--auth must be account or api-key.' >&2; return 2 ;; esac
+  [[ -z "$key_file" || "$auth" = api-key ]] || { echo '--api-key-file requires --auth api-key.' >&2; return 2; }
+  if [[ -n "$auth" ]]; then host_args+=(--auth "$auth"); auth_check_args+=(--auth "$auth"); fi
+  if [[ -n "$key_file" ]]; then host_args+=(--api-key-file "$key_file"); auth_check_args+=(--api-key-file "$key_file"); fi
+  [[ "$login" != yes ]] || auth_check_args+=(--login)
   ref="${MUSE_BRIDGE_REF:-$ref}"
   case "$root" in /*) ;; *) echo 'MUSE_BRIDGE_ROOT must be an absolute path.' >&2; return 1 ;; esac
   case "$(uname -s)" in Darwin) os=darwin ;; Linux) os=linux ;; *) echo 'Only macOS and Linux are supported.' >&2; return 1 ;; esac
@@ -109,6 +122,8 @@ main() {
   [[ -f "$work/repo/install.sh" && -f "$work/repo/scripts/prepare-bootstrap.mjs" ]] || { echo 'The downloaded repository is incomplete.' >&2; return 1; }
   # Refuse to replace modified or unrelated checkout files before installing more tools.
   "$node_bin" "$work/repo/scripts/prepare-bootstrap.mjs" check "$root" "$work/repo" "$sha"
+  effective_auth=$("$node_bin" "$work/repo/dist/configure-auth.mjs" "${auth_check_args[@]}")
+  if [[ "$effective_auth" = api-key ]]; then login=no; fi
 
   muse_bin="${MUSE_BRIDGE_EXECUTABLE:-$(command -v muse || true)}"
   local new_muse=false

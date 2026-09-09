@@ -25,7 +25,7 @@ rl.on('line', line => {
 }
 
 test('real process transport handles partial frames, restricted flags, and API-key removal', async t => {
-  const host = new MuseHost({ executable: await fixture(t), mode: 'read-only', env: { ...process.env, META_API_KEY: 'test-only' } });
+  const host = new MuseHost({ executable: await fixture(t), mode: 'read-only', connection: { mode: 'account' }, env: { ...process.env, META_API_KEY: 'test-only' } });
   t.after(() => host.close());
   await host.start();
   const result = await host.request('inspect', {});
@@ -34,21 +34,30 @@ test('real process transport handles partial frames, restricted flags, and API-k
 });
 
 test('process exit rejects pending requests promptly', async t => {
-  const host = new MuseHost({ executable: await fixture(t) });
+  const host = new MuseHost({ executable: await fixture(t), connection: { mode: 'account' } });
   t.after(() => host.close());
   await host.start();
   await assert.rejects(host.request('crash', {}), /Muse exited/);
 });
 
 test('malformed protocol output fails closed', async t => {
-  const host = new MuseHost({ executable: await fixture(t, 'malformed') });
+  const host = new MuseHost({ executable: await fixture(t, 'malformed'), connection: { mode: 'account' } });
   t.after(() => host.close());
   await assert.rejects(host.start(), /invalid protocol JSON/);
 });
 
 test('code process retains the default sandbox without bypass flags', async t => {
-  const host = new MuseHost({ executable: await fixture(t), mode: 'code' });
+  const host = new MuseHost({ executable: await fixture(t), mode: 'code', connection: { mode: 'account' } });
   t.after(() => host.close());
   await host.start();
   assert.deepEqual((await host.request('inspect', {})).args, ['serve']);
+});
+
+test('explicit API mode injects the selected key into the Muse child without CLI arguments', async t => {
+  const host = new MuseHost({ executable: await fixture(t), connection: { mode: 'api-key', apiKey: 'fixture-key' } });
+  t.after(() => host.close());
+  await host.start();
+  const result = await host.request('inspect', {});
+  assert.equal(result.hasApiKey, true);
+  assert.deepEqual(result.args, ['serve', '--disable-shell', '--disable-write']);
 });
