@@ -136,6 +136,30 @@ test('poll wakes on completion and cancel targets the current turn', async t => 
   assert.equal(hosts[0].calls.find(c => c.method === 'turn/interrupt').params.turnId, run.turn_id);
 });
 
+test('a provisional history failure cannot finish a live turn before its completion notification', async t => {
+  const { bridge, directory, hosts } = await setup(t);
+  const run = await bridge.start({ prompt: 'review', workspace: directory });
+  const host = hosts[0];
+  const request = host.request.bind(host);
+  host.request = async (method, params) => {
+    const result = await request(method, params);
+    // Muse 1.0.3 can expose both of these snapshots while inference is active.
+    if (method === 'session/read') return { ...result, session: { ...result.session, activeTurnId: null } };
+    if (method === 'view/page') return { events: [{ method: 'turn/completed', params: {
+      sessionId: run.session_id, turnId: run.turn_id, terminal: 'failed', reason: 'incomplete',
+    } }] };
+    return result;
+  };
+  const inProgress = await bridge.poll({ session_id: run.session_id });
+  assert.equal(inProgress.status, 'running');
+  assert.equal(inProgress.completion, null);
+  await assert.rejects(bridge.send({ session_id: run.session_id, message: 'duplicate' }), /still running/);
+  host.finish(run.session_id);
+  const finished = await bridge.poll({ session_id: run.session_id });
+  assert.equal(finished.status, 'completed');
+  assert.equal(finished.items[0].text, 'answer');
+});
+
 test('run deadline interrupts rather than silently extending usage', async t => {
   const { bridge, directory } = await setup(t, { maxTurnMs: 20 });
   const run = await bridge.start({ prompt: 'review', workspace: directory });

@@ -21705,6 +21705,7 @@ var MuseBridge = class {
         if (!state || state.host !== host) return;
         if (method === "turn/started") {
           state.turnId = params.turnId;
+          state.liveTurn = true;
           state.status = "running";
           this.armDeadline(state);
         }
@@ -21768,7 +21769,7 @@ var MuseBridge = class {
     return { sessions: records.filter(Boolean).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 100) };
   }
   newState(record2, host) {
-    const state = { record: record2, host, status: "idle", turnId: null, completion: null, waiters: /* @__PURE__ */ new Set() };
+    const state = { record: record2, host, status: "idle", turnId: null, liveTurn: false, completion: null, waiters: /* @__PURE__ */ new Set() };
     this.sessions.set(record2.session_id, state);
     return state;
   }
@@ -21851,6 +21852,7 @@ var MuseBridge = class {
   async submit(state, prompt, effort2, displayText) {
     if (state.submitting || state.status === "running") throw new Error("Muse is still running. Poll or cancel the current turn before sending another message.");
     state.submitting = true;
+    state.liveTurn = true;
     state.completion = null;
     state.limitReached = false;
     try {
@@ -21897,7 +21899,7 @@ var MuseBridge = class {
       state.host.request("view/page", { sessionId: session_id, direction: "backward", limit: 100 })
     ]);
     const completed = [...page.events].reverse().find((e) => e.method === "turn/completed")?.params;
-    if (!state.completion && completed && (!state.turnId || completed.turnId === state.turnId)) state.completion = completed;
+    if (!state.liveTurn && !state.completion && completed && (!state.turnId || completed.turnId === state.turnId)) state.completion = completed;
     if (!state.turnId) state.turnId = read.session.activeTurnId || state.completion?.turnId;
     const snapshotItems = read.history.items || read.history.snapshot?.state?.items;
     const fromPage = /* @__PURE__ */ new Map();

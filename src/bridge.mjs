@@ -53,7 +53,7 @@ export class MuseBridge {
       host.on('event', (method, params) => {
         const state = this.sessions.get(params.sessionId);
         if (!state || state.host !== host) return;
-        if (method === 'turn/started') { state.turnId = params.turnId; state.status = 'running'; this.armDeadline(state); }
+        if (method === 'turn/started') { state.turnId = params.turnId; state.liveTurn = true; state.status = 'running'; this.armDeadline(state); }
         if (method === 'turn/completed') {
           state.completion = params;
           state.status = params.terminal;
@@ -117,7 +117,7 @@ export class MuseBridge {
   }
 
   newState(record, host) {
-    const state = { record, host, status: 'idle', turnId: null, completion: null, waiters: new Set() };
+    const state = { record, host, status: 'idle', turnId: null, liveTurn: false, completion: null, waiters: new Set() };
     this.sessions.set(record.session_id, state);
     return state;
   }
@@ -190,6 +190,7 @@ export class MuseBridge {
   async submit(state, prompt, effort, displayText) {
     if (state.submitting || state.status === 'running') throw new Error('Muse is still running. Poll or cancel the current turn before sending another message.');
     state.submitting = true;
+    state.liveTurn = true;
     state.completion = null;
     state.limitReached = false;
     try {
@@ -226,7 +227,10 @@ export class MuseBridge {
       state.host.request('view/page', { sessionId: session_id, direction: 'backward', limit: 100 }),
     ]);
     const completed = [...page.events].reverse().find(e => e.method === 'turn/completed')?.params;
-    if (!state.completion && completed && (!state.turnId || completed.turnId === state.turnId)) state.completion = completed;
+    // Muse 1.0.3 may project an unfinished log as a failed/incomplete turn, even
+    // with activeTurnId null. For live work, only its completion notification
+    // settles the turn. Historical pages recover results after reconnecting.
+    if (!state.liveTurn && !state.completion && completed && (!state.turnId || completed.turnId === state.turnId)) state.completion = completed;
     if (!state.turnId) state.turnId = read.session.activeTurnId || state.completion?.turnId;
     const snapshotItems = read.history.items || read.history.snapshot?.state?.items;
     const fromPage = new Map();
