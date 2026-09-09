@@ -21507,6 +21507,10 @@ function readConnection(env = process.env) {
   return resolveConnection(readConfig(env));
 }
 
+// src/build-info.mjs
+var bridgeVersion = true ? "0.1.0" : "source";
+var bridgeBuild = true ? "7f2575c63d58559a" : "source";
+
 // src/msp.mjs
 function uuid7() {
   const bytes = randomBytes(16);
@@ -21574,7 +21578,7 @@ var MuseHost = class extends EventEmitter {
     this.child.stdout.setEncoding("utf8");
     this.child.stdout.on("data", (chunk) => this.consume(chunk));
     const result = await this.request("initialize", {
-      clientInfo: { name: "muse_bridge", title: "Muse Bridge", version: "0.1.0" }
+      clientInfo: { name: "muse_bridge", title: "Muse Bridge", version: bridgeVersion }
     });
     if (result.schema?.version !== 1) {
       this.close();
@@ -21691,6 +21695,7 @@ var MuseBridge = class {
     this.hostFactory = hostFactory || ((options) => new MuseHost(options));
     this.connection = connection || readConnection();
     this.maxTurnMs = maxTurnMs;
+    this.startedAt = (/* @__PURE__ */ new Date()).toISOString();
     this.hosts = /* @__PURE__ */ new Map();
     this.sessions = /* @__PURE__ */ new Map();
     this.loading = /* @__PURE__ */ new Map();
@@ -21754,6 +21759,9 @@ var MuseBridge = class {
     return {
       ready: true,
       muse_version: host.info.serverInfo.version,
+      bridge_version: bridgeVersion,
+      bridge_build: bridgeBuild,
+      bridge_started_at: this.startedAt,
       protocol_version: host.info.schema.version,
       auth_mode: this.connection.mode,
       authentication: this.connection.mode === "account" ? "Muse-managed stored credentials; inherited META_API_KEY is removed." : "Explicit pay-as-you-go API key from a private file, passed only to the Muse child environment.",
@@ -21824,7 +21832,16 @@ var MuseBridge = class {
     const mode = role === "code" ? "code" : "read-only";
     const host = await this.host(mode);
     const id = uuid7();
-    const record2 = { session_id: id, workspace: root, role, mode, auth_mode: this.connection.mode, created_at: (/* @__PURE__ */ new Date()).toISOString() };
+    const record2 = {
+      session_id: id,
+      workspace: root,
+      role,
+      mode,
+      auth_mode: this.connection.mode,
+      bridge_version: bridgeVersion,
+      bridge_build: bridgeBuild,
+      created_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
     await this.save(record2);
     const state = this.newState(record2, host);
     try {
@@ -21966,7 +21983,7 @@ Never request credentials in chat or change billing routes as a fallback. Use mu
 
 // src/server.mjs
 var bridge = new MuseBridge();
-var server = new McpServer({ name: "muse-code-bridge", version: "0.1.0" }, { instructions });
+var server = new McpServer({ name: "muse-code-bridge", version: bridgeVersion }, { instructions });
 var sessionId = external_exports.string().uuid().describe("A session_id returned by Muse Bridge.");
 var effort = external_exports.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]).optional();
 var annotations = (readOnly, openWorld = false) => ({ readOnlyHint: readOnly, destructiveHint: !readOnly, idempotentHint: readOnly, openWorldHint: openWorld });
@@ -21980,7 +21997,7 @@ function register(name, description, inputSchema, handler, hints) {
     }
   });
 }
-register("muse_status", "Check the official local Muse CLI and discover its available models without starting a model turn. This does not verify subscription eligibility.", {}, () => bridge.status(), annotations(true));
+register("muse_status", "Report the running bridge build and startup time, check the official local Muse CLI, and discover its available models without starting a model turn. This does not verify subscription eligibility.", {}, () => bridge.status(), annotations(true));
 register("muse_sessions", "List sessions created by Muse Bridge on this machine. Session IDs can be reused after a desktop restart.", {}, () => bridge.list(), annotations(true));
 register("muse_start", "Ask Muse Code to consult, review, compare approaches, or perform an explicitly requested coding task. Starts a persistent conversation using the official Muse CLI login. Sends the prompt and any workspace content Muse reads to Meta. consult/review/compare disable shell and file writes; code allows sandboxed tools under Muse approval policy. Returns quickly; collect the actual answer with muse_poll. Does not switch the host model or give Muse the host browser/tools.", {
   prompt: external_exports.string().min(1).max(15e4),

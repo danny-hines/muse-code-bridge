@@ -12,6 +12,10 @@ try {
   console.log('MCP tools:', tools.tools.map(t => t.name).join(', '));
   const result = await client.callTool({ name: 'muse_status', arguments: {} });
   if (result.isError) throw new Error(result.content[0].text);
+  const status = result.structuredContent;
+  if (!/^[0-9a-f]{16}$/.test(status.bridge_build) || status.bridge_version !== client.getServerVersion().version ||
+      !Number.isFinite(Date.parse(status.bridge_started_at))) throw new Error('Bundled runtime build information is missing or inconsistent.');
+  console.log(`Running bridge: ${status.bridge_version}, build ${status.bridge_build}, started ${status.bridge_started_at}`);
   console.log('MCP → bundled bridge → official Muse handshake passed.');
   const sessionId = process.argv[3];
   if (sessionId) {

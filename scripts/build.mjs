@@ -1,6 +1,15 @@
 import { build } from 'esbuild';
 import { mkdir, readFile, writeFile, copyFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
+
+const pkg = JSON.parse(await readFile('package.json', 'utf8'));
+const inputs = ['package.json', 'package-lock.json', 'scripts/build.mjs',
+  ...(await readdir('src')).filter(name => name.endsWith('.mjs')).map(name => join('src', name))].sort();
+const fingerprint = createHash('sha256');
+for (const path of inputs) fingerprint.update(path).update('\0').update(await readFile(path)).update('\0');
+const bridgeBuild = fingerprint.digest('hex').slice(0, 16);
+
 await mkdir('plugins/muse-codex-bridge/scripts', { recursive: true });
 await mkdir('dist', { recursive: true });
 const result = await build({
@@ -8,6 +17,7 @@ const result = await build({
   outdir: 'dist', outExtension: { '.js': '.mjs' },
   bundle: true, platform: 'node', format: 'esm', target: 'node22',
   mainFields: ['module', 'main'],
+  define: { __MUSE_BRIDGE_VERSION__: JSON.stringify(pkg.version), __MUSE_BRIDGE_BUILD__: JSON.stringify(bridgeBuild) },
   banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
   legalComments: 'eof', metafile: true,
 });
@@ -35,4 +45,4 @@ await writeFile('dist/THIRD_PARTY_NOTICES.txt', notices.join('\n\n'));
 await copyFile('dist/muse-server.mjs', 'plugins/muse-codex-bridge/scripts/server.mjs');
 await copyFile('integrations/codex/README.md', 'plugins/muse-codex-bridge/README.md');
 await copyFile('LICENSE', 'plugins/muse-codex-bridge/LICENSE');
-console.log('Built the shared Muse server, host installer, and Codex plugin.');
+console.log(`Built the shared Muse server, host installer, and Codex plugin (${pkg.version}, build ${bridgeBuild}).`);

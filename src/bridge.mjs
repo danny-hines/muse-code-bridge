@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { MuseHost, uuid7 } from './msp.mjs';
 import { readConnection } from './auth.mjs';
+import { bridgeVersion, bridgeBuild } from './build-info.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES = {
@@ -40,6 +41,7 @@ export class MuseBridge {
     this.hostFactory = hostFactory || (options => new MuseHost(options));
     this.connection = connection || readConnection();
     this.maxTurnMs = maxTurnMs;
+    this.startedAt = new Date().toISOString();
     this.hosts = new Map();
     this.sessions = new Map();
     this.loading = new Map();
@@ -98,6 +100,7 @@ export class MuseBridge {
     const catalog = await host.request('model/list', {});
     return {
       ready: true, muse_version: host.info.serverInfo.version,
+      bridge_version: bridgeVersion, bridge_build: bridgeBuild, bridge_started_at: this.startedAt,
       protocol_version: host.info.schema.version,
       auth_mode: this.connection.mode,
       authentication: this.connection.mode === 'account'
@@ -164,7 +167,8 @@ export class MuseBridge {
     const mode = role === 'code' ? 'code' : 'read-only';
     const host = await this.host(mode);
     const id = uuid7();
-    const record = { session_id: id, workspace: root, role, mode, auth_mode: this.connection.mode, created_at: new Date().toISOString() };
+    const record = { session_id: id, workspace: root, role, mode, auth_mode: this.connection.mode,
+      bridge_version: bridgeVersion, bridge_build: bridgeBuild, created_at: new Date().toISOString() };
     // Save the identity before admission so an uncertain acknowledgement can be recovered.
     await this.save(record);
     const state = this.newState(record, host);

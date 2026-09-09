@@ -112,7 +112,8 @@ fi
 "$codex_bin" plugin marketplace add "$repo_dir"
 "$codex_bin" plugin add muse-codex-bridge@muse-code-bridge
 echo
-echo 'Muse Code Bridge installed. Start a NEW local conversation in ChatGPT desktop.'
+echo 'Muse Code Bridge installed. When current work finishes, fully quit Codex (Cmd+Q on macOS) and reopen it.'
+echo 'Start a NEW local conversation. Existing conversations may retain the previous bridge server until you quit the app.'
 echo 'Enable the Muse Code Bridge plugin (not the model picker) and ask: Ask Muse to review my changes.'
-echo 'If you have not signed in to Muse yet, run muse login or rerun ./install.sh --login.'
+echo 'For account mode, sign in with muse login if needed. API mode uses your configured private key file.'
 echo 'Keep this checkout; run git pull --ff-only and ./install.sh to update.'

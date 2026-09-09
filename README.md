@@ -34,7 +34,7 @@ Use `--login` to run login explicitly or `--no-login` to skip optional login. Me
 | Hermes | `mcp_servers.muse_code_bridge` | [Setup and usage](integrations/hermes/README.md) |
 | OpenCode 1 / 2 beta | Version-aware `muse_code_bridge` MCP entry | [Setup and usage](integrations/opencode/README.md) |
 
-After installation, restart the selected host and start a new **local** conversation in your project. In Codex, enable **Muse Code Bridge** in the plugins picker. Ask:
+After installation, restart the selected host and start a new **local** conversation in your project. For Codex, fully quit the app (Cmd+Q on macOS) and reopen it, then enable **Muse Code Bridge** in the plugins picker. Ask:
 
 > Ask Muse to review my changes. Compare its findings with yours and verify the disagreements.
 
@@ -66,6 +66,8 @@ Add `--check` for a read-only preflight or `--login` for Muse login. macOS users
 The bootstrap keeps source at `~/.local/share/muse-bridge/repo` and managed dependencies under `runtime/`. This established path is retained across the project rename so existing session metadata stays available. Reruns refuse to overwrite modified source, unrelated directories, or conflicting host entries. Hermes/OpenCode config changes create private backups and preserve unrelated settings and comments.
 
 Rerun the same bootstrap command to update, or use `git pull --ff-only` and `./install.sh --host …` for a clone. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
+
+After updating, wait for current work to finish and fully quit and reopen your host. Existing Codex conversations can retain the old bridge server despite newer files being installed. `muse_status` reports the actual running `bridge_version`, `bridge_build`, and `bridge_started_at` for troubleshooting; older releases omit these diagnostics.
 
 `MUSE_BRIDGE_REF` chooses a Git ref (default `main`); set it on the `bash` process. `MUSE_BRIDGE_ROOT` changes the managed root; for Codex, that setting must also reach the desktop plugin launcher. Executable overrides are `MUSE_BRIDGE_NODE_BIN`, `MUSE_BRIDGE_EXECUTABLE`, `MUSE_BRIDGE_CODEX_BIN`, and `MUSE_BRIDGE_OPENCODE_BIN`. Hermes/OpenCode config destinations can be set with `MUSE_BRIDGE_HERMES_CONFIG` and `MUSE_BRIDGE_OPENCODE_CONFIG`. The configuration tools never print existing credentials.
 

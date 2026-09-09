@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { join, delimiter } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { readConnection } from './auth.mjs';
+import { bridgeVersion } from './build-info.mjs';
 
 export function uuid7() {
   const bytes = randomBytes(16);
@@ -72,7 +73,7 @@ export class MuseHost extends EventEmitter {
     this.child.stdout.setEncoding('utf8');
     this.child.stdout.on('data', chunk => this.consume(chunk));
     const result = await this.request('initialize', {
-      clientInfo: { name: 'muse_bridge', title: 'Muse Bridge', version: '0.1.0' },
+      clientInfo: { name: 'muse_bridge', title: 'Muse Bridge', version: bridgeVersion },
     });
     if (result.schema?.version !== 1) {
       this.close();

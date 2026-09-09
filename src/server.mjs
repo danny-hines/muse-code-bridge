@@ -3,9 +3,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { MuseBridge } from './bridge.mjs';
 import { instructions } from './instructions.mjs';
+import { bridgeVersion } from './build-info.mjs';
 
 const bridge = new MuseBridge();
-const server = new McpServer({ name: 'muse-code-bridge', version: '0.1.0' }, { instructions });
+const server = new McpServer({ name: 'muse-code-bridge', version: bridgeVersion }, { instructions });
 const sessionId = z.string().uuid().describe('A session_id returned by Muse Bridge.');
 const effort = z.enum(['none','minimal','low','medium','high','xhigh','max','ultra']).optional();
 const annotations = (readOnly, openWorld = false) => ({ readOnlyHint: readOnly, destructiveHint: !readOnly, idempotentHint: readOnly, openWorldHint: openWorld });
@@ -21,7 +22,7 @@ function register(name, description, inputSchema, handler, hints) {
   });
 }
 
-register('muse_status', 'Check the official local Muse CLI and discover its available models without starting a model turn. This does not verify subscription eligibility.', {}, () => bridge.status(), annotations(true));
+register('muse_status', 'Report the running bridge build and startup time, check the official local Muse CLI, and discover its available models without starting a model turn. This does not verify subscription eligibility.', {}, () => bridge.status(), annotations(true));
 register('muse_sessions', 'List sessions created by Muse Bridge on this machine. Session IDs can be reused after a desktop restart.', {}, () => bridge.list(), annotations(true));
 register('muse_start', 'Ask Muse Code to consult, review, compare approaches, or perform an explicitly requested coding task. Starts a persistent conversation using the official Muse CLI login. Sends the prompt and any workspace content Muse reads to Meta. consult/review/compare disable shell and file writes; code allows sandboxed tools under Muse approval policy. Returns quickly; collect the actual answer with muse_poll. Does not switch the host model or give Muse the host browser/tools.', {
   prompt: z.string().min(1).max(150000),

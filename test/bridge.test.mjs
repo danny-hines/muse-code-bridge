@@ -106,12 +106,18 @@ test('persisted and legacy sessions reject a different authentication mode befor
   assert.equal(hosts.length, 1);
 });
 
-test('API status and session records identify the route without exposing a credential', async t => {
+test('status and session records identify the running build and auth route without exposing a credential', async t => {
   const { bridge, directory } = await setup(t, { connection: { mode: 'api-key', apiKey: 'fixture-secret' } });
   const status = await bridge.status();
   const run = await bridge.start({ prompt: 'review', workspace: directory });
   assert.equal(status.auth_mode, 'api-key');
   assert.equal(run.auth_mode, 'api-key');
+  assert.ok(status.bridge_build);
+  assert.equal(run.bridge_build, status.bridge_build);
+  assert.equal(run.bridge_version, status.bridge_version);
+  assert.equal((await bridge.list()).sessions[0].bridge_build, status.bridge_build);
+  assert.equal((await bridge.status()).bridge_started_at, status.bridge_started_at);
+  assert.ok(Number.isFinite(Date.parse(status.bridge_started_at)));
   assert.ok(!JSON.stringify([status, run, await bridge.list()]).includes('fixture-secret'));
 });
 

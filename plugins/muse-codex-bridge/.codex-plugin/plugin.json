@@ -1,6 +1,6 @@
 {
   "name": "muse-codex-bridge",
-  "version": "0.1.0+codex.20260909012150",
+  "version": "0.1.0+codex.20260909022647",
   "description": "Consult, review, and collaborate with your locally authenticated Muse Code from ChatGPT desktop.",
   "author": {
     "name": "Muse Code Bridge contributors"
