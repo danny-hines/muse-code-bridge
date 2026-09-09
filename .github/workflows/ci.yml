@@ -25,4 +25,4 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run check
       - name: Verify committed plugin matches source
-        run: git diff --exit-code -- plugins/muse-bridge
+        run: git diff --exit-code -- dist plugins/muse-codex-bridge

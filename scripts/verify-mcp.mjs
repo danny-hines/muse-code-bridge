@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { resolve } from 'node:path';
 
-const pluginDir = resolve(process.argv[2] || 'plugins/muse-bridge');
+const pluginDir = resolve(process.argv[2] || 'plugins/muse-codex-bridge');
 const client = new Client({ name: 'muse-bridge-verification', version: '0.1.0' });
 const transport = new StdioClientTransport({ command: '/bin/sh', args: ['./scripts/launch.sh'], cwd: pluginDir, stderr: 'pipe' });
 try {

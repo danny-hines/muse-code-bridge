@@ -42,7 +42,7 @@ test('installer --check is read-only and never logs in', async t => {
   const s = await setup(t);
   const result = await s.run('--check');
   assert.match(result.stdout, /No settings changed/);
-  assert.ok((await s.calls()).every(call => call.args.includes('--help') || call.args[0] === '--version'));
+  assert.ok((await s.calls()).every(call => call.args.includes('--help') || call.args[0] === '--version' || call.args[1] === 'list'));
 });
 
 test('installer registers the checkout before installing the namespaced plugin', async t => {
@@ -51,7 +51,7 @@ test('installer registers the checkout before installing the namespaced plugin',
   const mutations = (await s.calls()).filter(c => c.cli === 'codex' && !c.args.includes('--help') && c.args[1] !== 'list');
   assert.deepEqual(mutations.map(c => c.args), [
     ['plugin', 'marketplace', 'add', repository],
-    ['plugin', 'add', 'muse-bridge@muse-bridge'],
+    ['plugin', 'add', 'muse-codex-bridge@muse-code-bridge'],
   ]);
 });
 
@@ -62,8 +62,8 @@ test('installer refuses duplicate installations before mutating settings', async
 });
 
 test('installer can update its own marketplace without a duplicate warning', async t => {
-  const s = await setup(t, { INSTALL_TEST_INSTALLED: JSON.stringify({ installed: [{ name: 'muse-bridge', marketplaceName: 'muse-bridge' }] }) });
-  assert.match((await s.run()).stdout, /Muse Bridge installed/);
+  const s = await setup(t, { INSTALL_TEST_INSTALLED: JSON.stringify({ installed: [{ name: 'muse-codex-bridge', marketplaceName: 'muse-code-bridge' }] }) });
+  assert.match((await s.run()).stdout, /Muse Code Bridge installed/);
 });
 
 test('optional login removes overriding API key only from the login child', async t => {
@@ -90,6 +90,7 @@ test('installation works from a checkout path containing spaces', async t => {
   const s = await setup(t);
   const checkout = join(s.dir, 'repo with spaces');
   await cp(join(repository, 'plugins'), join(checkout, 'plugins'), { recursive: true });
+  await cp(join(repository, 'integrations'), join(checkout, 'integrations'), { recursive: true });
   await cp(join(repository, '.agents'), join(checkout, '.agents'), { recursive: true });
   await cp(join(repository, 'install.sh'), join(checkout, 'install.sh'));
   await exec('/bin/sh', [join(checkout, 'install.sh')], { env: s.env });

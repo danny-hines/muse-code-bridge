@@ -2,9 +2,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { MuseBridge } from './bridge.mjs';
+import { instructions } from './instructions.mjs';
 
 const bridge = new MuseBridge();
-const server = new McpServer({ name: 'muse-bridge', version: '0.1.0' });
+const server = new McpServer({ name: 'muse-code-bridge', version: '0.1.0' }, { instructions });
 const sessionId = z.string().uuid().describe('A session_id returned by Muse Bridge.');
 const effort = z.enum(['none','minimal','low','medium','high','xhigh','max','ultra']).optional();
 const annotations = (readOnly, openWorld = false) => ({ readOnlyHint: readOnly, destructiveHint: !readOnly, idempotentHint: readOnly, openWorldHint: openWorld });

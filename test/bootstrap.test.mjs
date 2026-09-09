@@ -22,7 +22,7 @@ async function setup(t, { missing = false, checksumMismatch = false } = {}) {
   const source = join(dir, 'source');
   await mkdir(bin); await mkdir(source);
   await writeFile(log, '');
-  for (const name of ['install.sh', '.agents', 'plugins']) await cp(join(repo, name), join(source, name), { recursive: true });
+  for (const name of ['install.sh', '.agents', 'plugins', 'integrations', 'dist']) await cp(join(repo, name), join(source, name), { recursive: true });
   await mkdir(join(source, 'scripts'));
   await cp(join(repo, 'scripts/prepare-bootstrap.mjs'), join(source, 'scripts/prepare-bootstrap.mjs'));
   const repoTar = join(dir, 'repo.tar.gz');
@@ -64,8 +64,8 @@ fs.chmodSync(path.join(prefix,'node_modules/.bin/codex'),0o755);
   const routes = {
     [`${nodeBase}/SHASUMS256.txt`]: sums,
     [`https://nodejs.org/dist/v22.23.2/${nodeName}`]: nodeTar,
-    'https://api.github.com/repos/danny-hines/muse-bridge/commits/main': commit,
-    [`https://codeload.github.com/danny-hines/muse-bridge/tar.gz/${sha}`]: repoTar,
+    'https://api.github.com/repos/danny-hines/muse-code-bridge/commits/main': commit,
+    [`https://codeload.github.com/danny-hines/muse-code-bridge/tar.gz/${sha}`]: repoTar,
     'https://dev.meta.ai/install.sh': museInstaller,
   };
   await writeFile(join(bin, 'curl'), shebang + logger.replace('TOOL', '"curl"') + `
@@ -81,12 +81,12 @@ fs.copyFileSync(file,args[args.indexOf('--output')+1]);
     MUSE_BRIDGE_CODEX_BIN: missing ? join(dir, 'absent-codex') : codex,
     MUSE_BRIDGE_REF: 'main', BOOTSTRAP_TEST_ROUTES: JSON.stringify(routes),
     BOOTSTRAP_TEST_LOG: log, BOOTSTRAP_TEST_MUSE: muse, BOOTSTRAP_TEST_CODEX: codex,
-    META_API_KEY: 'test-only',
+    META_API_KEY: 'test-only', MUSE_BRIDGE_HERMES_CONFIG: join(dir, 'hermes.yaml'), MUSE_BRIDGE_OPENCODE_CONFIG: join(dir, 'opencode.jsonc'),
   };
   t.after(() => rm(dir, { recursive: true, force: true }));
   return {
     root, env, dir,
-    run: async () => exec('/bin/bash', ['-c', 'cat "$1" | bash -s -- --no-login', 'bootstrap-test', join(repo, 'bootstrap.sh')], { env }),
+    run: async (...args) => exec('/bin/bash', ['-c', 'script=$1; shift; cat "$script" | bash -s -- --no-login "$@"', 'bootstrap-test', join(repo, 'bootstrap.sh'), ...args], { env }),
     calls: async () => (await readFile(log, 'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse),
   };
 }
@@ -100,7 +100,7 @@ test('piped bootstrap reuses existing tools, downloads pinned source, and cleans
   const calls = await s.calls();
   assert.equal(calls.filter(c => c.tool === 'curl').length, 2);
   assert.ok(!calls.some(c => c.tool === 'npm' || c.args[0] === 'login'));
-  assert.ok(calls.some(c => c.tool === 'codex' && c.args[1] === 'add' && c.args[2] === 'muse-bridge@muse-bridge'));
+  assert.ok(calls.some(c => c.tool === 'codex' && c.args[1] === 'add' && c.args[2] === 'muse-codex-bridge@muse-code-bridge'));
   assert.equal(await exists(join(s.root, '.bootstrap-lock')), false);
 });
 
@@ -148,4 +148,34 @@ test('bootstrap preserves local edits and refuses unmanaged destination director
   await writeFile(file, 'my edits');
   await assert.rejects(s.run(), e => /source files have changed/.test(e.stderr));
   assert.equal(await readFile(file, 'utf8'), 'my edits');
+});
+
+test('Hermes bootstrap installs shared dependencies without downloading or calling Codex', async t => {
+  const s = await setup(t, { missing: true });
+  await s.run('--host', 'hermes');
+  const calls = await s.calls();
+  assert.ok(!calls.some(c => c.tool === 'codex' || c.tool === 'npm'));
+  assert.equal(await exists(join(s.root, 'runtime/bin/codex')), false);
+  assert.match(await readFile(s.env.MUSE_BRIDGE_HERMES_CONFIG, 'utf8'), /muse_code_bridge:/);
+});
+
+test('one bootstrap configures both alternative hosts; a later Codex install preserves them', async t => {
+  const s = await setup(t);
+  await s.run('--host', 'hermes', '--host', 'opencode', '--opencode-version', '2');
+  const before = await readFile(s.env.MUSE_BRIDGE_OPENCODE_CONFIG, 'utf8');
+  assert.ok(JSON.parse(before).mcp.servers.muse_code_bridge);
+  assert.ok(!(await s.calls()).some(c => c.tool === 'codex'));
+  await s.run('--host', 'codex');
+  assert.equal(await readFile(s.env.MUSE_BRIDGE_OPENCODE_CONFIG, 'utf8'), before);
+  assert.ok(await exists(join(s.root, 'runtime/bin/codex')));
+  await s.run('--host', 'hermes');
+  assert.ok(await exists(join(s.root, 'runtime/bin/codex')));
+});
+
+test('invalid host arguments stop before downloads or configuration changes', async t => {
+  const s = await setup(t);
+  await assert.rejects(s.run('--host', 'unknown'), /Unknown host/);
+  await assert.rejects(s.run('--opencode-version', '3'), /OpenCode version/);
+  assert.equal((await s.calls()).length, 0);
+  assert.equal(await exists(s.root), false);
 });

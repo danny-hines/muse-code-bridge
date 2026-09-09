@@ -1,14 +1,14 @@
 {
-  "name": "muse-bridge",
+  "name": "muse-code-bridge",
   "interface": {
-    "displayName": "Muse Bridge"
+    "displayName": "Muse Code Bridge"
   },
   "plugins": [
     {
-      "name": "muse-bridge",
+      "name": "muse-codex-bridge",
       "source": {
         "source": "local",
-        "path": "./plugins/muse-bridge"
+        "path": "./plugins/muse-codex-bridge"
       },
       "policy": {
         "installation": "AVAILABLE",

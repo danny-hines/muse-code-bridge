@@ -4,24 +4,39 @@ main() {
   set -euo pipefail
   umask 077
   local root="${MUSE_BRIDGE_ROOT:-$HOME/.local/share/muse-bridge}"
-  local ref=main login=auto node_bin muse_bin codex_bin npm_bin work os arch archive expected actual
+  local ref=main login=auto node_bin muse_bin codex_bin="" npm_bin work os arch archive expected actual
+  local wants_codex=false opencode_version=auto
+  local -a host_args=()
   local node_base=https://nodejs.org/dist/latest-v22.x
-  local repository=danny-hines/muse-bridge
+  local repository=danny-hines/muse-code-bridge
   local arg
-  for arg in "$@"; do
-    case "$arg" in
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --host)
+        [[ "$#" -ge 2 ]] || { echo '--host needs codex, hermes, or opencode.' >&2; return 2; }
+        case "$2" in codex) wants_codex=true ;; hermes|opencode) ;; *) echo "Unknown host: $2" >&2; return 2 ;; esac
+        host_args+=(--host "$2"); shift ;;
+      --opencode-version)
+        [[ "$#" -ge 2 ]] || { echo '--opencode-version needs 1, 2, or auto.' >&2; return 2; }
+        case "$2" in 1|2|auto) opencode_version="$2" ;; *) echo 'OpenCode version must be 1, 2, or auto.' >&2; return 2 ;; esac
+        shift ;;
       --login) login=yes ;;
       --no-login) login=no ;;
       --help|-h)
-        printf '%s\n' 'Usage: bootstrap.sh [--login | --no-login]' \
-          'Fetch Muse Bridge and install missing Node.js, Codex CLI, and Muse Code locally.' \
+        printf '%s\n' 'Usage: bootstrap.sh [--host codex|hermes|opencode] [--login | --no-login]' \
+          'Repeat --host for several apps. Defaults to codex.' \
+          'Fetch Muse Code Bridge; install missing Node.js and Muse Code locally.' \
+          'Only the Codex integration installs the Codex CLI. Host desktop apps must already be installed.' \
           'Existing compatible tools are reused. No sudo or shell-profile edits.' \
+          '--opencode-version auto|1|2: use 2 for the beta; default auto.' \
           '--login: always run Muse login. --no-login: skip optional login.' \
           'MUSE_BRIDGE_REF selects a Git ref (default main). MUSE_BRIDGE_ROOT changes the local install root.'
         return 0 ;;
-      *) printf 'Unknown option: %s\n' "$arg" >&2; return 2 ;;
+      *) printf 'Unknown option: %s\n' "$1" >&2; return 2 ;;
     esac
+    shift
   done
+  if [[ "${#host_args[@]}" -eq 0 ]]; then host_args=(--host codex); wants_codex=true; fi
   ref="${MUSE_BRIDGE_REF:-$ref}"
   case "$root" in /*) ;; *) echo 'MUSE_BRIDGE_ROOT must be an absolute path.' >&2; return 1 ;; esac
   case "$(uname -s)" in Darwin) os=darwin ;; Linux) os=linux ;; *) echo 'Only macOS and Linux are supported.' >&2; return 1 ;; esac
@@ -109,25 +124,27 @@ main() {
     new_muse=true
   fi
 
-  codex_bin="${MUSE_BRIDGE_CODEX_BIN:-$(command -v codex || true)}"
-  if ! compatible_codex "$codex_bin"; then
-    npm_bin="$(dirname "$node_bin")/npm"
-    [[ -x "$npm_bin" ]] || npm_bin="$(command -v npm || true)"
-    [[ -x "$npm_bin" ]] || { echo 'npm was not found. Install Node with npm and rerun setup.' >&2; return 1; }
-    echo 'Installing the official Codex CLI privately from npm...'
-    "$npm_bin" install --prefix "$root/runtime/codex" --registry=https://registry.npmjs.org \
-      --no-audit --no-fund --ignore-scripts @openai/codex@0.153.4
-    codex_bin="$root/runtime/codex/node_modules/.bin/codex"
-    compatible_codex "$codex_bin" || { echo 'The installed Codex CLI does not support plugins.' >&2; return 1; }
+  if [[ "$wants_codex" = true ]]; then
+    codex_bin="${MUSE_BRIDGE_CODEX_BIN:-$(command -v codex || true)}"
+    if ! compatible_codex "$codex_bin"; then
+      npm_bin="$(dirname "$node_bin")/npm"
+      [[ -x "$npm_bin" ]] || npm_bin="$(command -v npm || true)"
+      [[ -x "$npm_bin" ]] || { echo 'npm was not found. Install Node with npm and rerun setup.' >&2; return 1; }
+      echo 'Installing the official Codex CLI privately from npm...'
+      "$npm_bin" install --prefix "$root/runtime/codex" --registry=https://registry.npmjs.org \
+        --no-audit --no-fund --ignore-scripts @openai/codex@0.153.4
+      codex_bin="$root/runtime/codex/node_modules/.bin/codex"
+      compatible_codex "$codex_bin" || { echo 'The installed Codex CLI does not support plugins.' >&2; return 1; }
+    fi
   fi
 
   # Resolve managed symlinks on reruns so none of the runtime links point to themselves.
   node_bin=$("$node_bin" -e 'process.stdout.write(require("fs").realpathSync(process.argv[1]))' "$node_bin")
   muse_bin=$("$node_bin" -e 'process.stdout.write(require("fs").realpathSync(process.argv[1]))' "$muse_bin")
-  codex_bin=$("$node_bin" -e 'process.stdout.write(require("fs").realpathSync(process.argv[1]))' "$codex_bin")
+  if [[ -n "$codex_bin" ]]; then codex_bin=$("$node_bin" -e 'process.stdout.write(require("fs").realpathSync(process.argv[1]))' "$codex_bin"); fi
   "$node_bin" "$work/repo/scripts/prepare-bootstrap.mjs" install "$root" "$work/repo" "$sha" "$node_bin" "$muse_bin" "$codex_bin"
   export MUSE_BRIDGE_NODE_BIN="$node_bin" MUSE_BRIDGE_EXECUTABLE="$muse_bin" MUSE_BRIDGE_CODEX_BIN="$codex_bin"
-  /bin/sh "$root/repo/install.sh"
+  /bin/sh "$root/repo/install.sh" "${host_args[@]}" --opencode-version "$opencode_version"
 
   if [[ "$login" = yes || ( "$login" = auto && "$new_muse" = true ) ]]; then
     echo 'Sign in to your Muse account through the official browser flow.'
@@ -140,7 +157,7 @@ main() {
   fi
   echo "Installed source commit: $sha"
   echo "Local source: $root/repo"
-  echo 'Setup finished. Open a NEW local conversation in ChatGPT desktop and select Muse Bridge.'
+  echo 'Setup finished. Restart the selected host and start a new local conversation. Ask Muse to review your project.'
 }
 
 main "$@"

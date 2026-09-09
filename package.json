@@ -1,18 +1,24 @@
 {
-  "name": "muse-bridge",
+  "name": "muse-code-bridge",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "check": "npm test && npm run build"
+    "check": "npm run build && npm test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
+    "jsonc-parser": "3.3.1",
+    "yaml": "2.9.0",
     "zod": "^3.25.76"
   },
-  "devDependencies": { "esbuild": "0.28.2" }
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
 }

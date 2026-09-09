@@ -7,7 +7,7 @@ const [operation, root, source, sha, node, muse, codex] = process.argv.slice(2);
 if (!['check', 'install'].includes(operation) || !isAbsolute(root || '') || !isAbsolute(source || '') || !/^[a-f0-9]{40}$/.test(sha || '')) throw new Error('Invalid bootstrap arguments.');
 const target = join(root, 'repo');
 const marker = '.muse-bridge-source.json';
-const identity = 'danny-hines/muse-bridge';
+const identity = 'danny-hines/muse-code-bridge';
 
 async function exists(path) { try { return await lstat(path); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } }
 async function inventory(path, prefix = '') {
@@ -25,14 +25,14 @@ async function inventory(path, prefix = '') {
   return result;
 }
 
-const pkg = JSON.parse(await readFile(join(source, 'plugins/muse-bridge/.codex-plugin/plugin.json'), 'utf8'));
-if (pkg.name !== 'muse-bridge') throw new Error('Downloaded plugin has an unexpected identity.');
+const pkg = JSON.parse(await readFile(join(source, 'plugins/muse-codex-bridge/.codex-plugin/plugin.json'), 'utf8'));
+if (pkg.name !== 'muse-codex-bridge') throw new Error('Downloaded plugin has an unexpected identity.');
 let old;
 if (await exists(target)) {
   if (!(await lstat(target)).isDirectory()) throw new Error('The bootstrap destination must be a real directory.');
   try { old = JSON.parse(await readFile(join(target, marker), 'utf8')); }
   catch { throw new Error(`Refusing to replace an existing unmanaged directory: ${target}`); }
-  if (old.repository !== identity || JSON.stringify(old.files) !== JSON.stringify(await inventory(target))) {
+  if (![identity, 'danny-hines/muse-bridge'].includes(old.repository) || JSON.stringify(old.files) !== JSON.stringify(await inventory(target))) {
     throw new Error(`Your source files have changed. Preserve those edits before rerunning setup: ${target}`);
   }
 }
@@ -49,7 +49,7 @@ for (const name of ['node', 'muse', 'codex']) {
   }
 }
 if (operation === 'install') {
-  const binaries = { node, muse, codex };
+  const binaries = { node, muse, ...(codex ? { codex } : {}) };
   for (const [name, path] of Object.entries(binaries)) {
     if (!isAbsolute(path || '') || path === join(bin, name)) throw new Error(`Invalid ${name} executable path.`);
   }
@@ -67,7 +67,7 @@ if (operation === 'install') {
     await symlink(path, temporary);
     await rename(temporary, join(bin, name));
   }
-  await writeFile(linksFile, JSON.stringify(binaries, null, 2) + '\n', { mode: 0o600 });
+  await writeFile(linksFile, JSON.stringify({ ...ownedLinks, ...binaries }, null, 2) + '\n', { mode: 0o600 });
   if (hasTarget) await rm(backup, { recursive: true });
   console.log('Managed source and runtime paths are ready.');
 } else {

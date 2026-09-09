@@ -1,91 +1,44 @@
-# Muse Bridge
+# Muse Code Bridge
 
-Use your locally authenticated Muse Code as a collaborator inside ChatGPT desktop's local Work/Codex conversations. Ask for a second opinion, code review, competing approach, or coding task, then continue the same Muse conversation.
+Call your locally authenticated Muse Code from **Codex / ChatGPT desktop, Hermes, or OpenCode**. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation.
 
-This is a working community plugin built against Muse Code **1.0.3 (1.0.3-R2198.1)** and MSP v1. It calls the official `muse serve` process. It does not replace the ChatGPT model or directly grant Muse access to ChatGPT's browser and tools. The host assistant can gather evidence with those tools, send relevant results to Muse, and evaluate its response.
+One shared MCP server connects to the official `muse serve` process. Each host gets its own installer and instructions. **Muse is a collaborator, not a new entry in your host's model picker.** The host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse.
+
+Community integration, built against Muse Code **1.0.3 (1.0.3-R2198.1)** and Muse Session Protocol v1. This repository contains no credentials and no hosted relay.
 
 ## Install
 
-Share this repository: **[github.com/danny-hines/muse-bridge](https://github.com/danny-hines/muse-bridge)**.
+Repository: [danny-hines/muse-code-bridge](https://github.com/danny-hines/muse-code-bridge).
 
-Run this on the computer where you use ChatGPT desktop:
+**Publication status:** the repository is prepared locally; the GitHub links and curl commands become usable after publication.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-bridge/main/bootstrap.sh | bash
-```
-
-The script fetches the repository and installs the desktop plugin. It reuses compatible tools already installed; when needed, it installs Node.js, the Codex CLI, and Muse Code in your home directory. **No Git, Homebrew, sudo, global npm install, or manual build is needed.**
-
-Sign in to your own Muse account when prompted, then start a **new local conversation** in ChatGPT desktop and select **Muse Bridge**. If Muse is already installed, setup offers an optional login; otherwise, it runs Muse's official browser login after installation. ChatGPT desktop itself must already be installed and signed in.
-
-macOS is verified. Linux is covered by mocked installer tests; its desktop integration has not been verified. Windows is not supported by this launcher. Standard system tools (`bash`, `curl`, `tar`, and a SHA-256 utility) are required.
-
-### What the bootstrap does
-
-1. Reuses Node.js 22+ or downloads a private Node.js 22 runtime from nodejs.org and verifies its published SHA-256 checksum.
-2. Resolves the selected Git ref to a commit and downloads that source snapshot from GitHub.
-3. Reuses a compatible Muse installation or runs Meta's official installer with a private install path and shell-profile changes disabled.
-4. Reuses a Codex CLI with plugin support or installs the tested `@openai/codex@0.153.4` package under a private npm prefix.
-5. Registers the repository marketplace and installs the plugin. It saves executable paths so the app can find them when launched from the Dock.
-
-Files live under `~/.local/share/muse-bridge`: `repo/` holds the source snapshot and `runtime/` holds managed tools and links. Existing Muse sessions and bridge metadata stay in place. Bootstrap updates refuse to overwrite locally modified source files or an unrelated directory. Dependency downloads require internet access; Meta may require account login to download Muse itself.
-
-To explicitly run login, or to skip optional login prompts:
+Run on the computer where you use your host app. Codex is the default:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-bridge/main/bootstrap.sh | bash -s -- --login
-curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-bridge/main/bootstrap.sh | bash -s -- --no-login
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash
 ```
 
-`--no-login` does not bypass any authentication Meta requires for downloading or using Muse. To inspect the script before running it:
+Select another host, or repeat `--host` to install several:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-bridge/main/bootstrap.sh -o /tmp/muse-bridge-bootstrap.sh
-less /tmp/muse-bridge-bootstrap.sh
-bash /tmp/muse-bridge-bootstrap.sh
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --host hermes
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --host opencode
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --host codex --host hermes --host opencode
 ```
 
-### Install from a clone
+The bootstrap fetches a commit-pinned source snapshot, reuses compatible tools, and installs missing Node.js 22+ and Muse Code locally. **Only a Codex install checks or installs the Codex CLI.** No Git, Homebrew, sudo, global npm install, or build step is required. The desktop apps themselves must already be installed. Sign in to your own Muse account through the official browser flow when prompted.
 
-For contributors or people who already have Git, Node.js 22+, Muse Code 1.0.3+, and the Codex CLI:
+Use `--login` to run login explicitly or `--no-login` to skip optional login. Meta may still require authentication to download or use Muse. OpenCode's version is detected from its CLI or existing MCP configuration; if unavailable, pass `--opencode-version 1` or `--opencode-version 2` for the beta.
 
-```sh
-git clone https://github.com/danny-hines/muse-bridge.git
-cd muse-bridge
-./install.sh
-```
+| Host | Integration | Details |
+|---|---|---|
+| Codex / ChatGPT desktop | `muse-codex-bridge` plugin, MCP tools, Muse skill | [Setup and usage](integrations/codex/README.md) |
+| Hermes | `mcp_servers.muse_code_bridge` | [Setup and usage](integrations/hermes/README.md) |
+| OpenCode 1 / 2 beta | Version-aware `muse_code_bridge` MCP entry | [Setup and usage](integrations/opencode/README.md) |
 
-If you have not signed in to Muse yet, use `./install.sh --login` instead of the last command. This runs Muse's official browser login. If you are already signed in, the installer reuses that setup without opening another login flow. After cloning, macOS users can also double-click **Install.command** in Finder.
+After installation, restart the selected host and start a new **local** conversation in your project. In Codex, enable **Muse Code Bridge** in the plugins picker. Ask:
 
-The checkout's `install.sh` checks prerequisites and registers this checkout as the `muse-bridge` marketplace. Unlike `bootstrap.sh`, it expects dependencies to be present. Keep the checkout at the same path for updates. To run checks without changing settings:
-
-```sh
-./install.sh --check
-```
-
-If another copy is already installed from a different marketplace, `install.sh` stops before changing plugin settings. Remove that copy in the desktop Plugins screen and rerun setup to switch sources. To switch between a clone and the bootstrap-managed source, remove the old `muse-bridge` marketplace first using the uninstall commands below. This retains Muse sessions and bridge metadata.
-
-**Prefer to ask the desktop agent to install it?** Give it this repository URL and say:
-
-> Read this repository's README and bootstrap script, then install Muse Bridge for me. Use my existing Muse login if available.
-
-### Install directly as a GitHub marketplace
-
-With the same prerequisites, you can skip cloning and the install script:
-
-```sh
-codex plugin marketplace add danny-hines/muse-bridge --ref main
-codex plugin add muse-bridge@muse-bridge
-```
-
-The prebuilt MCP server is committed to the repository. Recipients do not need to compile it or run `npm install`.
-
-## Use it
-
-1. Start a **new local conversation** in the project you want Muse to work with. New plugin tools are picked up in new conversations.
-2. Select Muse Bridge or invoke its `muse` skill, then ask:
-
-   > Ask Muse to review my changes. Compare its findings with yours and verify the disagreements.
+> Ask Muse to review my changes. Compare its findings with yours and verify the disagreements.
 
 Other examples:
 
@@ -94,7 +47,37 @@ Other examples:
 - “Use the browser to reproduce this UI bug, share the findings with Muse, and ask it to suggest a fix.”
 - “Ask Muse to implement this fix in the current project, then review its diff.”
 
-`consult`, `review`, and `compare` sessions disable Muse shell execution and file writes. `code` sessions retain Muse's sandbox and on-request approval policy. Muse can still read relevant workspace files and send them to Meta. Use `code` only for an implementation request. The bridge relays pending approvals and questions through the host conversation; it never enables blanket approvals or persistent policy changes.
+`consult`, `review`, and `compare` disable Muse's shell and file writes. `code` retains Muse's sandbox and approval policy. The host relays pending approvals and questions. Muse can read relevant workspace content; each user controls their own Muse account and settings.
+
+### Install from a clone
+
+With Node.js 22+, Muse Code 1.0.3+, and the Codex CLI if selecting Codex:
+
+```sh
+git clone https://github.com/danny-hines/muse-code-bridge.git
+cd muse-code-bridge
+./install.sh --host codex
+# Or:
+./install.sh --host hermes --host opencode --opencode-version 1
+```
+
+Add `--check` for a read-only preflight or `--login` for Muse login. macOS users can double-click `Install.command` for the default Codex installation. Keep the checkout in place; hosts reference it.
+
+### Local files and updates
+
+The bootstrap keeps source at `~/.local/share/muse-bridge/repo` and managed dependencies under `runtime/`. This established path is retained across the project rename so existing session metadata stays available. Reruns refuse to overwrite modified source, unrelated directories, or conflicting host entries. Hermes/OpenCode config changes create private backups and preserve unrelated settings and comments.
+
+Rerun the same bootstrap command to update, or use `git pull --ff-only` and `./install.sh --host …` for a clone. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
+
+`MUSE_BRIDGE_REF` chooses a Git ref (default `main`); set it on the `bash` process. `MUSE_BRIDGE_ROOT` changes the managed root; for Codex, that setting must also reach the desktop plugin launcher. Executable overrides are `MUSE_BRIDGE_NODE_BIN`, `MUSE_BRIDGE_EXECUTABLE`, `MUSE_BRIDGE_CODEX_BIN`, and `MUSE_BRIDGE_OPENCODE_BIN`. Hermes/OpenCode config destinations can be set with `MUSE_BRIDGE_HERMES_CONFIG` and `MUSE_BRIDGE_OPENCODE_CONFIG`. The configuration tools never print existing credentials.
+
+To inspect the bootstrap before executing it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh -o /tmp/muse-code-bridge-bootstrap.sh
+less /tmp/muse-code-bridge-bootstrap.sh
+bash /tmp/muse-code-bridge-bootstrap.sh --host codex
+```
 
 ## Login and subscription
 
@@ -121,101 +104,57 @@ Starts and follow-ups return quickly. Polls wait at most 20 seconds; the host co
 
 Current-turn output is bounded (up to 80 items and about 60,000 characters). Long individual messages are explicitly truncated. If Muse supplies only paged history, `history_partial` is true. The bridge deliberately excludes reasoning items. There is no dedicated Muse chat panel, token-by-token host UI, automatic debate loop, direct browser-tool forwarding, cloud relay, or native model-picker integration in this release.
 
-## Update or uninstall
+## Architecture and provider support
 
-For a bootstrap installation, rerun the same one-line command. It reuses dependencies and replaces an unmodified source snapshot with the selected commit. Managed source snapshots are not Git checkouts. The default ref is `main`; set `MUSE_BRIDGE_REF` on the `bash` process to select a release tag or commit.
-
-If you installed from a clone, run these commands in that checkout:
-
-```sh
-git pull --ff-only
-./install.sh
+```text
+src/                         Shared Muse protocol client, sessions, MCP tools
+integrations/codex/          Codex installer and usage guide
+integrations/hermes/         Hermes integration guide
+integrations/opencode/       OpenCode integration guide
+plugins/muse-codex-bridge/   Standalone Codex plugin package
+scripts/configure-host.mjs   Hermes YAML and OpenCode JSONC configuration
+scripts/prepare-bootstrap.mjs Managed source/runtime setup
+bootstrap.sh                 Dependency bootstrap and host selection
+install.sh                   Checkout installer and host preflight
 ```
 
-If you installed directly as a GitHub marketplace:
+The build produces `dist/muse-server.mjs`, a bundled host configuration helper, and the same MCP server inside the Codex package. Host configuration uses absolute executable paths; no API service needs to stay running outside the host.
 
-```sh
-codex plugin marketplace upgrade muse-bridge
-codex plugin add muse-bridge@muse-bridge
-```
+**Native provider mode is not implemented.** Codex [custom model providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers), Hermes [external-process provider plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin#external-process-acp-providers), and OpenCode [custom providers](https://opencode.ai/docs/providers/#custom-provider) are separate integration surfaces. A future adapter would need to translate messages, streaming, tool calls/results, and cancellation while preserving Muse's official authentication path. A working MCP bridge does not establish that native provider mode or desktop model-picker registration works.
 
-After updating, start a new local conversation. To uninstall:
+## Validation and supported systems
 
-```sh
-codex plugin remove muse-bridge@muse-bridge
-codex plugin marketplace remove muse-bridge
-```
+The shell installers target macOS and Linux, arm64 and x64. They need `bash`, `curl`, `tar`, and a SHA-256 utility. Windows is not supported by this launcher.
 
-Uninstalling does not delete your Muse installation, login, sessions, bridge metadata, or project files. You can delete your clone afterward.
-
-For bootstrap installs, private tools and source remain under `~/.local/share/muse-bridge/runtime` and `~/.local/share/muse-bridge/repo`. Those two directories can be removed after uninstalling. Keep the rest of `~/.local/share/muse-bridge` if you want to retain bridge session metadata. Tools installed separately elsewhere are never removed by these commands.
-
-## Troubleshooting
-
-| Problem | What to do |
-|---|---|
-| `node`, `muse`, or `codex` is missing | Use the bootstrap command to install missing tools. For a manual checkout, `./install.sh --check` diagnoses prerequisites. |
-| Muse login or eligibility error | Rerun bootstrap with `--login`, or run your Muse CLI's `login` command and check the account/plan. |
-| Plugin installed but tools are missing | Start a new **local** desktop conversation and enable Muse Bridge. Restart the desktop app if the catalog has not refreshed. |
-| Already installed from `personal` or another marketplace | Remove that copy from the Plugins screen before switching to the repository installation. |
-| `sessionInUse` | Close or release that session in its other Muse host before resuming here. |
-| Tools work in Terminal but not from the Dock | Rerun bootstrap to save working executable paths. The launcher also checks common Homebrew and `~/.local/bin` paths. |
-| Bootstrap says source files changed | Preserve your edits before updating. For ongoing development, use a separate Git clone. |
-| An earlier setup was interrupted | Confirm it has stopped, then remove the empty `~/.local/share/muse-bridge/.bootstrap-lock` directory and rerun. |
-
-The installers accept `MUSE_BRIDGE_NODE_BIN`, `MUSE_BRIDGE_CODEX_BIN`, and `MUSE_BRIDGE_EXECUTABLE` as executable paths. Bootstrap persists the selected paths as managed symlinks; the checkout installer alone does not. `MUSE_BRIDGE_ROOT` overrides the bootstrap's local root; if changed, that same environment setting must be available to the desktop app's plugin launcher. The default root needs no environment configuration.
-
-## Distribution
-
-Share the GitHub repository URL. Everyone installs the plugin locally and signs in to their own Muse account. This is repository distribution, separate from the universal public plugin directory. A hosted service is not needed for this local integration.
+- The official Muse process has passed a real two-turn conversation and session-resume check on macOS.
+- The bundled MCP server is verified through an MCP SDK client; the Codex plugin is installed locally.
+- All 39 automated tests pass. Hermes/OpenCode configuration and installer paths are exercised in isolated tests, including OpenCode 1 and 2 layouts. Their generated launch commands have also connected to the real Muse CLI through an MCP SDK client. Those desktop apps have not been exercised end to end.
+- Fresh dependency installation is tested with download/process fixtures. GitHub CI is configured for macOS and Linux; it has not run until publication.
 
 ## Develop
 
 ```sh
 npm ci --ignore-scripts
-npm test
-npm run build
+npm run check
 npm run smoke
+node scripts/verify-mcp.mjs
+node scripts/verify-hosts.mjs
 ```
 
-`npm run smoke` only performs a protocol handshake and model discovery. To deliberately consume Muse usage for a two-turn connection and memory check:
+The smoke command only performs a handshake and model discovery. `node scripts/smoke.mjs --live` deliberately consumes Muse usage for a two-turn check. Tests use temporary config paths and fake CLIs; they never overwrite your live host configuration. Commit rebuilt `dist/` and plugin files so recipients don't need npm or a build.
 
-```sh
-node scripts/smoke.mjs --live
-```
+## Troubleshooting
 
-The build bundles the supported MCP TypeScript SDK v1 into `plugins/muse-bridge/scripts/server.mjs`. Source lives in `src/`; the standalone plugin is in `plugins/muse-bridge/`. `.agents/plugins/marketplace.json` makes the repository installable as a plugin marketplace. Tests cover the bridge, transport, checkout installer, and curl bootstrap with temporary directories, fake downloads, and mock CLIs. `scripts/verify-mcp.mjs` checks the actual bundle through the official MCP client and requires a real Muse installation.
+- Missing tools: use bootstrap, or run `./install.sh --host … --check` to diagnose a checkout.
+- Missing tools in the host: restart it, open a new local conversation, and enable the plugin/MCP entry. Project or managed settings may override global configuration.
+- OpenCode version cannot be detected: pass `--opencode-version 1` or `2` explicitly.
+- Conflicting host entry: preserve your existing entry and remove or rename it before installing. The installer will not overwrite it.
+- Prototype Codex plugin already installed: follow the migration commands in the Codex guide.
+- Login/eligibility failure: run the official `muse login` flow and inspect the account in Muse.
+- `sessionInUse`: release that conversation in its other host before resuming; don't kill unrelated Muse processes.
+- Interrupted setup: confirm no installer is running, then remove its stale `.bootstrap-lock` directory or the named config lock file before retrying.
+- Modified managed source: preserve your edits before updating; use a separate Git clone for development.
 
-After changing source, run `npm run check` and commit the regenerated plugin files along with your source changes. CI verifies that the checked-in bundle matches the source. Bump the plugin and package versions for distributed releases so installed copies refresh correctly.
+## License
 
-Optional environment settings:
-
-- `MUSE_BRIDGE_EXECUTABLE`: explicit path to the official Muse executable.
-- `MUSE_BRIDGE_DATA_DIR`: directory for bridge session metadata; default `~/.local/share/muse-bridge`.
-
-Muse retains its own session logs. Bridge metadata contains session IDs, project paths, role, and model, stored as private local files. The plugin reads no credential files. CLI stderr is not forwarded into tool results. Diagnostic model errors can still include contextual information supplied by Muse.
-
-## Architecture and sources
-
-```text
-ChatGPT desktop conversation + host tools
-                │ MCP over stdio
-                ▼
-       Muse Bridge local server
-                │ MSP over stdio
-                ▼
-         Official Muse CLI
-                │ Muse-managed authentication
-                ▼
-              Meta
-```
-
-The local Muse binary's `--help`, `serve --help`, `login --help`, and offline `schema generate-ts` are the primary protocol references for this implementation.
-
-- [OpenAI: Plugins in ChatGPT and Codex](https://learn.chatgpt.com/docs/plugins)
-- [OpenAI: Package and distribute plugins](https://developers.openai.com/codex/plugins/build)
-- [OpenAI: Connect and test plugins](https://developers.openai.com/plugins/deploy/connect-chatgpt)
-- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
-- [Official Muse Code product page](https://developer.meta.com/ai/lp/muse-code/)
-
-Independent community integration; not affiliated with Meta or OpenAI.
+MIT. See [LICENSE](LICENSE). Bundled dependency notices are included in `dist/THIRD_PARTY_NOTICES.txt` and the Codex plugin. This is an independent community project, not an official Meta, OpenAI, Nous Research, or OpenCode integration.
