@@ -8,17 +8,46 @@ This is a working community plugin built against Muse Code **1.0.3 (1.0.3-R2198.
 
 Share this repository: **[github.com/danny-hines/muse-bridge](https://github.com/danny-hines/muse-bridge)**.
 
-Install these prerequisites on the computer running ChatGPT desktop:
+Run this on the computer where you use ChatGPT desktop:
 
-| Requirement | Setup |
-|---|---|
-| ChatGPT desktop with local Work/Codex tasks and plugin support | Use a local project conversation |
-| [Node.js 22+](https://nodejs.org/) | Install Node.js; no npm dependencies are needed to use this plugin |
-| [Muse Code 1.0.3+](https://developer.meta.com/ai/lp/muse-code/) | Install the official CLI and sign in with your own Muse account |
-| [Codex CLI](https://developers.openai.com/codex/cli/) | Needed once for the installer to register and install the desktop plugin |
-| Git | Needed to clone and update this repository |
+```sh
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-bridge/main/bootstrap.sh | bash
+```
 
-macOS is verified. Linux is expected to work but the desktop integration has not been verified there. Windows is not supported by the launcher.
+The script fetches the repository and installs the desktop plugin. It reuses compatible tools already installed; when needed, it installs Node.js, the Codex CLI, and Muse Code in your home directory. **No Git, Homebrew, sudo, global npm install, or manual build is needed.**
+
+Sign in to your own Muse account when prompted, then start a **new local conversation** in ChatGPT desktop and select **Muse Bridge**. If Muse is already installed, setup offers an optional login; otherwise, it runs Muse's official browser login after installation. ChatGPT desktop itself must already be installed and signed in.
+
+macOS is verified. Linux is covered by mocked installer tests; its desktop integration has not been verified. Windows is not supported by this launcher. Standard system tools (`bash`, `curl`, `tar`, and a SHA-256 utility) are required.
+
+### What the bootstrap does
+
+1. Reuses Node.js 22+ or downloads a private Node.js 22 runtime from nodejs.org and verifies its published SHA-256 checksum.
+2. Resolves the selected Git ref to a commit and downloads that source snapshot from GitHub.
+3. Reuses a compatible Muse installation or runs Meta's official installer with a private install path and shell-profile changes disabled.
+4. Reuses a Codex CLI with plugin support or installs the tested `@openai/codex@0.153.4` package under a private npm prefix.
+5. Registers the repository marketplace and installs the plugin. It saves executable paths so the app can find them when launched from the Dock.
+
+Files live under `~/.local/share/muse-bridge`: `repo/` holds the source snapshot and `runtime/` holds managed tools and links. Existing Muse sessions and bridge metadata stay in place. Bootstrap updates refuse to overwrite locally modified source files or an unrelated directory. Dependency downloads require internet access; Meta may require account login to download Muse itself.
+
+To explicitly run login, or to skip optional login prompts:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-bridge/main/bootstrap.sh | bash -s -- --login
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-bridge/main/bootstrap.sh | bash -s -- --no-login
+```
+
+`--no-login` does not bypass any authentication Meta requires for downloading or using Muse. To inspect the script before running it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-bridge/main/bootstrap.sh -o /tmp/muse-bridge-bootstrap.sh
+less /tmp/muse-bridge-bootstrap.sh
+bash /tmp/muse-bridge-bootstrap.sh
+```
+
+### Install from a clone
+
+For contributors or people who already have Git, Node.js 22+, Muse Code 1.0.3+, and the Codex CLI:
 
 ```sh
 git clone https://github.com/danny-hines/muse-bridge.git
@@ -28,17 +57,17 @@ cd muse-bridge
 
 If you have not signed in to Muse yet, use `./install.sh --login` instead of the last command. This runs Muse's official browser login. If you are already signed in, the installer reuses that setup without opening another login flow. After cloning, macOS users can also double-click **Install.command** in Finder.
 
-The installer checks prerequisites and the bundled plugin, registers this checkout as the `muse-bridge` marketplace, and installs `muse-bridge@muse-bridge` using the Codex CLI. It does not run model turns, install dependencies, or change shell profiles. Keep the checkout at the same path for updates. To run checks without changing settings:
+The checkout's `install.sh` checks prerequisites and registers this checkout as the `muse-bridge` marketplace. Unlike `bootstrap.sh`, it expects dependencies to be present. Keep the checkout at the same path for updates. To run checks without changing settings:
 
 ```sh
 ./install.sh --check
 ```
 
-If another copy of Muse Bridge is already installed from a different marketplace, the installer stops before changing settings. Remove that copy in the desktop Plugins screen and rerun the script to switch to the repository version. This retains Muse sessions and bridge metadata.
+If another copy is already installed from a different marketplace, `install.sh` stops before changing plugin settings. Remove that copy in the desktop Plugins screen and rerun setup to switch sources. To switch between a clone and the bootstrap-managed source, remove the old `muse-bridge` marketplace first using the uninstall commands below. This retains Muse sessions and bridge metadata.
 
 **Prefer to ask the desktop agent to install it?** Give it this repository URL and say:
 
-> Clone this repository, read its README and install script, and install Muse Bridge for me. Use my existing Muse login if available.
+> Read this repository's README and bootstrap script, then install Muse Bridge for me. Use my existing Muse login if available.
 
 ### Install directly as a GitHub marketplace
 
@@ -94,6 +123,8 @@ Current-turn output is bounded (up to 80 items and about 60,000 characters). Lon
 
 ## Update or uninstall
 
+For a bootstrap installation, rerun the same one-line command. It reuses dependencies and replaces an unmodified source snapshot with the selected commit. Managed source snapshots are not Git checkouts. The default ref is `main`; set `MUSE_BRIDGE_REF` on the `bash` process to select a release tag or commit.
+
 If you installed from a clone, run these commands in that checkout:
 
 ```sh
@@ -117,18 +148,22 @@ codex plugin marketplace remove muse-bridge
 
 Uninstalling does not delete your Muse installation, login, sessions, bridge metadata, or project files. You can delete your clone afterward.
 
+For bootstrap installs, private tools and source remain under `~/.local/share/muse-bridge/runtime` and `~/.local/share/muse-bridge/repo`. Those two directories can be removed after uninstalling. Keep the rest of `~/.local/share/muse-bridge` if you want to retain bridge session metadata. Tools installed separately elsewhere are never removed by these commands.
+
 ## Troubleshooting
 
 | Problem | What to do |
 |---|---|
-| `node`, `muse`, or `codex` is missing | Install the prerequisite above and reopen your terminal. Use `./install.sh --check` to diagnose. |
-| Muse login or eligibility error | Run `muse login` and check your Muse account/plan. The bridge does not fall back to a separate API key. |
+| `node`, `muse`, or `codex` is missing | Use the bootstrap command to install missing tools. For a manual checkout, `./install.sh --check` diagnoses prerequisites. |
+| Muse login or eligibility error | Rerun bootstrap with `--login`, or run your Muse CLI's `login` command and check the account/plan. |
 | Plugin installed but tools are missing | Start a new **local** desktop conversation and enable Muse Bridge. Restart the desktop app if the catalog has not refreshed. |
 | Already installed from `personal` or another marketplace | Remove that copy from the Plugins screen before switching to the repository installation. |
 | `sessionInUse` | Close or release that session in its other Muse host before resuming here. |
-| Tools work in Terminal but not from the Dock | The launcher checks common Homebrew and `~/.local/bin` paths. For other locations, configure executable paths in the desktop environment. |
+| Tools work in Terminal but not from the Dock | Rerun bootstrap to save working executable paths. The launcher also checks common Homebrew and `~/.local/bin` paths. |
+| Bootstrap says source files changed | Preserve your edits before updating. For ongoing development, use a separate Git clone. |
+| An earlier setup was interrupted | Confirm it has stopped, then remove the empty `~/.local/share/muse-bridge/.bootstrap-lock` directory and rerun. |
 
-The installer accepts `MUSE_BRIDGE_NODE_BIN`, `MUSE_BRIDGE_CODEX_BIN`, and `MUSE_BRIDGE_EXECUTABLE` as executable paths. These overrides do not persist environment settings into the desktop app.
+The installers accept `MUSE_BRIDGE_NODE_BIN`, `MUSE_BRIDGE_CODEX_BIN`, and `MUSE_BRIDGE_EXECUTABLE` as executable paths. Bootstrap persists the selected paths as managed symlinks; the checkout installer alone does not. `MUSE_BRIDGE_ROOT` overrides the bootstrap's local root; if changed, that same environment setting must be available to the desktop app's plugin launcher. The default root needs no environment configuration.
 
 ## Distribution
 
@@ -149,7 +184,7 @@ npm run smoke
 node scripts/smoke.mjs --live
 ```
 
-The build bundles the supported MCP TypeScript SDK v1 into `plugins/muse-bridge/scripts/server.mjs`. Source lives in `src/`; the standalone plugin is in `plugins/muse-bridge/`. `.agents/plugins/marketplace.json` makes the repository installable as a plugin marketplace. Tests cover the bridge, transport, and installer using temporary directories and mock CLIs. `scripts/verify-mcp.mjs` checks the actual bundle through the official MCP client and requires a real Muse installation.
+The build bundles the supported MCP TypeScript SDK v1 into `plugins/muse-bridge/scripts/server.mjs`. Source lives in `src/`; the standalone plugin is in `plugins/muse-bridge/`. `.agents/plugins/marketplace.json` makes the repository installable as a plugin marketplace. Tests cover the bridge, transport, checkout installer, and curl bootstrap with temporary directories, fake downloads, and mock CLIs. `scripts/verify-mcp.mjs` checks the actual bundle through the official MCP client and requires a real Muse installation.
 
 After changing source, run `npm run check` and commit the regenerated plugin files along with your source changes. CI verifies that the checked-in bundle matches the source. Bump the plugin and package versions for distributed releases so installed copies refresh correctly.
 
