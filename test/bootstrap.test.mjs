@@ -14,7 +14,7 @@ const nodeBase = 'https://nodejs.org/dist/latest-v22.x';
 const shellQuote = s => `'${s.replaceAll("'", "'\\''")}'`;
 const exists = async path => { try { await access(path); return true; } catch { return false; } };
 
-async function setup(t, { missing = false, checksumMismatch = false } = {}) {
+async function setup(t, { missing = false, checksumMismatch = false, platform = process.platform } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'muse bootstrap test '));
   const root = join(dir, 'managed');
   const bin = join(dir, 'fixtures');
@@ -23,6 +23,13 @@ async function setup(t, { missing = false, checksumMismatch = false } = {}) {
   await mkdir(bin); await mkdir(source);
   await writeFile(log, '');
   for (const name of ['install.sh', '.agents', 'plugins', 'integrations', 'dist']) await cp(join(repo, name), join(source, name), { recursive: true });
+  // Never invoke launchctl or change the test runner's real Codex configuration.
+  await writeFile(join(source, 'dist/muse-native.mjs'), `
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(process.env.BOOTSTRAP_TEST_LOG, JSON.stringify({ tool: 'native', args })+'\\n');
+if (args[0] === process.env.BOOTSTRAP_TEST_NATIVE_FAIL) { console.error('Fixture native failure'); process.exit(1); }
+`);
   await mkdir(join(source, 'scripts'));
   await cp(join(repo, 'scripts/prepare-bootstrap.mjs'), join(source, 'scripts/prepare-bootstrap.mjs'));
   const repoTar = join(dir, 'repo.tar.gz');
@@ -34,6 +41,7 @@ async function setup(t, { missing = false, checksumMismatch = false } = {}) {
   const muse = join(bin, 'muse');
   const shebang = `#!${process.execPath}\n`;
   const logger = `const fs = require('node:fs'); const args = process.argv.slice(2); fs.appendFileSync(process.env.BOOTSTRAP_TEST_LOG, JSON.stringify({tool: TOOL, args})+'\\n');\n`;
+  await writeFile(join(bin, 'uname'), shebang + `console.log(process.argv[2] === '-s' ? ${JSON.stringify(platform === 'darwin' ? 'Darwin' : 'Linux')} : ${JSON.stringify(process.arch === 'arm64' ? 'arm64' : 'x86_64')});`, { mode: 0o755 });
   await writeFile(codex, shebang + logger.replace('TOOL', '"codex"') + `if(args[1]==='list') console.log('{"installed":[]}');`, { mode: 0o755 });
   await writeFile(muse, shebang + logger.replace('TOOL', '"muse"') + `if(args[0]==='--version') console.log('Muse Code 1.0.3');`, { mode: 0o755 });
   const museInstaller = join(dir, 'official-muse-fixture.sh');
@@ -55,7 +63,7 @@ fs.chmodSync(path.join(prefix,'node_modules/.bin/codex'),0o755);
 `, { mode: 0o755 });
   const nodeTar = join(dir, 'node.tar.gz');
   await exec('tar', ['-czf', nodeTar, '-C', dir, 'node-package']);
-  const os = process.platform === 'darwin' ? 'darwin' : 'linux';
+  const os = platform === 'darwin' ? 'darwin' : 'linux';
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
   const nodeName = `node-v22.23.2-${os}-${arch}.tar.gz`;
   const sum = checksumMismatch ? '0'.repeat(64) : createHash('sha256').update(await readFile(nodeTar)).digest('hex');
@@ -205,5 +213,47 @@ test('invalid host arguments stop before downloads or configuration changes', as
   await assert.rejects(s.run('--host', 'unknown'), /Unknown host/);
   await assert.rejects(s.run('--opencode-version', '3'), /OpenCode version/);
   assert.equal((await s.calls()).length, 0);
+  assert.equal(await exists(s.root), false);
+});
+
+test('native bootstrap installs dependencies, logs in once, checks service, and enables last', async t => {
+  const s = await setup(t, { missing: true, platform: 'darwin' });
+  const result = await s.run('--native', '--auth', 'account', '--login');
+  assert.match(result.stdout, /Fully quit Codex \(Cmd\+Q\)/);
+  assert.match(result.stdout, /Select a Muse model/);
+  assert.match(result.stdout, /disable --root/);
+  const calls = await s.calls();
+  assert.equal(calls.filter(c => c.tool === 'curl').length, 5);
+  assert.equal(calls.filter(c => c.tool === 'muse' && c.args[0] === 'login').length, 1);
+  assert.ok(calls.findIndex(c => c.args[0] === 'login') < calls.findIndex(c => c.tool === 'native'));
+  assert.deepEqual(calls.filter(c => c.tool === 'native').map(c => c.args), ['install', 'status', 'enable'].map(action => [action, '--root', join(s.root, 'native')]));
+  assert.match(result.stdout, /Muse-managed account credentials/);
+  // Account is the fresh-install default, so no connection file is necessary.
+  assert.equal(await exists(s.env.MUSE_BRIDGE_CONNECTION_FILE), false);
+});
+
+test('native API setup skips login and stops before enabling when the health check fails', async t => {
+  const s = await setup(t, { platform: 'darwin' });
+  const key = join(s.dir, 'key');
+  await writeFile(key, 'fixture-key', { mode: 0o600 });
+  s.env.BOOTSTRAP_TEST_NATIVE_FAIL = 'status';
+  await assert.rejects(s.run('--native', '--auth', 'api-key', '--api-key-file', key), e => {
+    assert.match(e.stderr, /Fixture native failure/);
+    assert.doesNotMatch(e.stdout, /Setup finished/);
+    return true;
+  });
+  const calls = await s.calls();
+  assert.ok(!calls.some(c => c.args[0] === 'login'));
+  assert.deepEqual(calls.filter(c => c.tool === 'native').map(c => c.args[0]), ['install', 'status']);
+  assert.equal(JSON.parse(await readFile(s.env.MUSE_BRIDGE_CONNECTION_FILE)).mode, 'api-key');
+  assert.equal(await exists(join(s.root, '.bootstrap-lock')), false);
+});
+
+test('unsupported native platforms and hosts are rejected before any installation', async t => {
+  const s = await setup(t, { platform: 'linux' });
+  await assert.rejects(s.run('--native'), /automatic setup requires macOS/);
+  await assert.rejects(s.run('--native', '--host', 'hermes'), /supports Codex only/);
+  await assert.rejects(s.run('--native', '--host', 'codex', '--host', 'opencode'), /supports Codex only/);
+  assert.deepEqual(await s.calls(), []);
   assert.equal(await exists(s.root), false);
 });

@@ -16,7 +16,15 @@ Only a completed Muse terminal result is accepted. Invalid JSON, unknown tools, 
 
 ## Install and enable
 
-First install the regular bridge using the root README's bootstrap, or use your existing checkout. From that checkout:
+On macOS, the complete setup is one command. Install the Codex desktop app first, then run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --native --auth account --login
+```
+
+Complete the official Muse browser sign-in, then fully quit and reopen Codex and start a new local task. No Git, Homebrew, API key, or build step is required. The script installs missing dependencies and the MCP plugin, prepares the native service, checks health, and enables it. See the [quick setup guide](setup.md) for an agent prompt and API setup. Account mode uses Muse's saved credentials; confirm your subscription is the active credential in Muse.
+
+For manual setup, first install the regular bridge using the root README's bootstrap, or use your existing checkout. From that checkout:
 
 ```sh
 node dist/muse-native.mjs install
@@ -26,7 +34,7 @@ node dist/muse-native.mjs enable
 
 For a bootstrap installation, the checkout is `~/.local/share/muse-bridge/repo`. If Node was installed by bootstrap, use `~/.local/share/muse-bridge/runtime/bin/node` in place of `node`. No extra npm install or build is required for the committed bundles.
 
-`install` discovers the available models through the official CLI. Use `--model EXACT_ID` to install only one discovered model, or omit it to include the catalog with Muse's marked default first (otherwise the first discovered model). `--port 47831` changes the localhost port. Neither model discovery nor the install command verifies subscription billing. Authentication is selected through the regular bridge installer, as documented in the root README.
+`install` discovers the available models through the official CLI. On a fresh installation it includes the catalog with Muse's marked default first (otherwise the first discovered model). On reruns it preserves the installed model set and port, even if Muse's catalog order changes. Use `--model EXACT_ID` to select one discovered model or `--port NUMBER` to change the localhost port (initially 47831); disable first when changing either. If a previously selected model is no longer available, setup stops and asks you to choose another. Neither model discovery nor the install command verifies subscription billing. Authentication is selected through the regular bridge installer, as documented in the root README.
 
 On macOS, installation creates a private provider configuration and a LaunchAgent named `com.muse-code-bridge.native`. It starts at login and listens only on `127.0.0.1`. A generated local bearer token protects the endpoint; it is not an OpenAI or Meta API key. On Linux, installation prints the command to run in a terminal or your service manager before enabling Codex.
 
@@ -44,7 +52,19 @@ node dist/muse-native.mjs disable
 
 Fully quit and reopen the app again. The existing Muse MCP plugin and skills remain available. Unrelated Codex settings are preserved; the helper refuses to overwrite manually changed managed blocks. A private recovery copy is stored at `~/.local/share/muse-bridge/native/codex-restore.json` while enabled. Do not share that file: it includes the original Codex configuration.
 
-After updating the repository, rerun `install` to refresh the bundled service. Do so between requests: it restarts the service. Disable first if changing its model set or port. To remove the macOS login service after disabling:
+For a default bootstrap installation, the full command works from any directory, even if Node was installed privately:
+
+```sh
+"$HOME/.local/share/muse-bridge/runtime/bin/node" "$HOME/.local/share/muse-bridge/repo/dist/muse-native.mjs" disable
+```
+
+To update a bootstrap installation on macOS, run the following **between requests**, since it restarts the service:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --native --no-login
+```
+
+This preserves the authentication choice, port, installed models, and original Codex recovery copy. Repeated `enable` validates the existing setup without replacing that copy. For a clone, update the repository and rerun `install`, `status`, and `enable`. Disable first if changing its model set or port. To remove the macOS login service after disabling:
 
 ```sh
 launchctl bootout "gui/$(id -u)/com.muse-code-bridge.native"

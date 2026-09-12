@@ -5,7 +5,7 @@ main() {
   umask 077
   local root="${MUSE_BRIDGE_ROOT:-$HOME/.local/share/muse-bridge}"
   local ref=main login=auto node_bin muse_bin codex_bin="" npm_bin work os arch archive expected actual
-  local wants_codex=false opencode_version=auto auth='' key_file='' effective_auth skills='' list_skills=false
+  local wants_codex=false wants_other_host=false native=false opencode_version=auto auth='' key_file='' effective_auth skills='' list_skills=false
   local -a host_args=()
   local -a auth_check_args=(--print-mode)
   local node_base=https://nodejs.org/dist/latest-v22.x
@@ -19,7 +19,7 @@ main() {
         shift ;;
       --host)
         [[ "$#" -ge 2 ]] || { echo '--host needs codex, hermes, or opencode.' >&2; return 2; }
-        case "$2" in codex) wants_codex=true ;; hermes|opencode) ;; *) echo "Unknown host: $2" >&2; return 2 ;; esac
+        case "$2" in codex) wants_codex=true ;; hermes|opencode) wants_other_host=true ;; *) echo "Unknown host: $2" >&2; return 2 ;; esac
         host_args+=(--host "$2"); shift ;;
       --opencode-version)
         [[ "$#" -ge 2 ]] || { echo '--opencode-version needs 1, 2, or auto.' >&2; return 2; }
@@ -27,10 +27,13 @@ main() {
         shift ;;
       --login) login=yes ;;
       --no-login) login=no ;;
+      --native) native=true ;;
       --list-skills) list_skills=true ;;
       --help|-h)
         printf '%s\n' 'Usage: bootstrap.sh [--host codex|hermes|opencode] [--login | --no-login]' \
           'Repeat --host for several apps. Defaults to codex.' \
+          '--native: also install and select the experimental Muse model provider for Codex on macOS.' \
+          'Native mode changes the provider for new local tasks; it does not combine Astra and Muse in one menu.' \
           'Fetch Muse Code Bridge; install missing Node.js and Muse Code locally.' \
           'Only the Codex integration installs the Codex CLI. Host desktop apps must already be installed.' \
           'Existing compatible tools are reused. No sudo or shell-profile edits.' \
@@ -55,6 +58,7 @@ main() {
     return 0
   fi
   if [[ "${#host_args[@]}" -eq 0 ]]; then host_args=(--host codex); wants_codex=true; fi
+  if [[ "$native" = true && "$wants_other_host" = true ]]; then echo '--native supports Codex only. Install Hermes/OpenCode separately without --native.' >&2; return 2; fi
   case "$skills" in ''|all|core|none|implement|review|implement,review|review,implement) ;; *) echo 'Invalid --skills selection. Use all, core, none, implement, or review (comma-separated).' >&2; return 2 ;; esac
   if [[ "$wants_codex" = true && -n "$skills" && "$skills" != all ]]; then echo 'Codex bundles all skills; selective --skills applies to Hermes/OpenCode.' >&2; return 2; fi
   [[ -z "$skills" ]] || host_args+=(--skills "$skills")
@@ -66,6 +70,7 @@ main() {
   ref="${MUSE_BRIDGE_REF:-$ref}"
   case "$root" in /*) ;; *) echo 'MUSE_BRIDGE_ROOT must be an absolute path.' >&2; return 1 ;; esac
   case "$(uname -s)" in Darwin) os=darwin ;; Linux) os=linux ;; *) echo 'Only macOS and Linux are supported.' >&2; return 1 ;; esac
+  if [[ "$native" = true && "$os" != darwin ]]; then echo '--native automatic setup requires macOS. For manual Linux service setup, see docs/native-provider.md in the repository.' >&2; return 2; fi
   case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; x86_64|amd64) arch=x64 ;; *) echo 'Only arm64 and x64 are supported.' >&2; return 1 ;; esac
   for arg in curl tar awk mktemp; do command -v "$arg" >/dev/null || { echo "Required system tool missing: $arg" >&2; return 1; }; done
   mkdir -p "$root/runtime"
@@ -144,9 +149,8 @@ main() {
     echo 'Installing Muse Code using the official Meta installer...'
     download https://dev.meta.ai/install.sh "$work/muse-install.sh"
     bash -n "$work/muse-install.sh"
-    local muse_login=0
-    [[ "$login" != no ]] && muse_login=1
-    (unset META_API_KEY MUSE_LAUNCHER_URL; MUSE_INSTALL_DIR="$root/runtime/muse/bin" MUSE_NO_MODIFY_PATH=1 MUSE_LOGIN="$muse_login" bash "$work/muse-install.sh")
+    # Run login once below, after dependency and bridge setup have succeeded.
+    (unset META_API_KEY MUSE_LAUNCHER_URL; MUSE_INSTALL_DIR="$root/runtime/muse/bin" MUSE_NO_MODIFY_PATH=1 MUSE_LOGIN=0 bash "$work/muse-install.sh")
     muse_bin="$root/runtime/muse/bin/muse"
     compatible_muse "$muse_bin" || { echo 'Muse installation did not produce a compatible CLI.' >&2; return 1; }
     new_muse=true
@@ -183,9 +187,21 @@ main() {
     read -r reply </dev/tty || reply=n
     if [[ "$reply" = y || "$reply" = Y ]]; then (unset META_API_KEY; "$muse_bin" login </dev/null); fi
   fi
+  if [[ "$native" = true ]]; then
+    "$node_bin" "$root/repo/dist/muse-native.mjs" install --root "$root/native"
+    "$node_bin" "$root/repo/dist/muse-native.mjs" status --root "$root/native"
+    "$node_bin" "$root/repo/dist/muse-native.mjs" enable --root "$root/native"
+  fi
   echo "Installed source commit: $sha"
   echo "Local source: $root/repo"
-  echo 'Setup finished. Restart the selected host and start a new local conversation. Ask Muse to review your project.'
+  if [[ "$native" = true ]]; then
+    echo 'Setup finished. Fully quit Codex (Cmd+Q), reopen it, and start a new local task. Select a Muse model in the picker.'
+    echo 'Native mode is experimental: text and tool handoffs are supported; images and full browser compatibility are not.'
+    echo 'To restore your previous model/provider, run this command, then fully quit and reopen Codex:'
+    printf '%q %q disable --root %q\n' "$root/runtime/bin/node" "$root/repo/dist/muse-native.mjs" "$root/native"
+  else
+    echo 'Setup finished. Restart the selected host and start a new local conversation. Ask Muse to review your project.'
+  fi
 }
 
 main "$@"

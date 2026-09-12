@@ -1010,8 +1010,16 @@ async function atomic(file, text) {
     });
   }
 }
+function installationSettings(previous, values, discovered, enabled) {
+  const port = Number(values.port ?? previous?.port ?? 47831);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid local port.");
+  const models = values.model ? [values.model] : previous?.models ?? discovered;
+  if (!Array.isArray(models) || !models.length || models.some((m) => !discovered.includes(m))) throw new Error("A selected model is unavailable in the official Muse catalog. Disable the provider before selecting a different model with --model.");
+  if (enabled && (!previous || previous.port !== port || JSON.stringify(previous.models) !== JSON.stringify(models))) throw new Error("Disable the current provider before changing its port or models.");
+  return { port, models };
+}
 async function main(argv = process.argv.slice(2)) {
-  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { model: { type: "string" }, port: { type: "string", default: "47831" }, help: { type: "boolean" }, root: { type: "string" }, "codex-config": { type: "string" } } });
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { model: { type: "string" }, port: { type: "string" }, help: { type: "boolean" }, root: { type: "string" }, "codex-config": { type: "string" } } });
   const action = positionals[0];
   if (values.help || !action) {
     console.log(help);
@@ -1021,8 +1029,7 @@ async function main(argv = process.argv.slice(2)) {
   const configPath = resolve(values["codex-config"] || join3(process.env.CODEX_HOME || join3(homedir3(), ".codex"), "config.toml"));
   const privateFile = join3(root, "provider.json"), catalogPath = join3(root, "models.json"), stateFile = join3(root, "codex-restore.json");
   if (action === "install") {
-    const port = Number(values.port);
-    if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid local port.");
+    const previous = await exists(privateFile) ? await readJson(privateFile) : null;
     const host = new MuseHost();
     let catalog;
     try {
@@ -1032,11 +1039,8 @@ async function main(argv = process.argv.slice(2)) {
       host.close();
     }
     const discovered = [...catalog.models].sort((a, b) => Number(b.isDefault) - Number(a.isDefault)).map((m) => m.modelId);
-    const models = values.model ? [values.model] : discovered;
-    if (!models.length || models.some((m) => !discovered.includes(m))) throw new Error("Choose a model reported by the official Muse catalog.");
+    const { port, models } = installationSettings(previous, values, discovered, Boolean(await exists(stateFile)));
     await mkdir(root, { recursive: true, mode: 448 });
-    const previous = await exists(privateFile) ? await readJson(privateFile) : null;
-    if (await exists(stateFile) && (previous.port !== port || JSON.stringify(previous.models) !== JSON.stringify(models))) throw new Error("Disable the current provider before changing its port or models.");
     const config2 = { port, token: previous?.token || randomBytes(32).toString("hex"), models };
     await atomic(privateFile, JSON.stringify(config2) + "\n");
     await atomic(catalogPath, JSON.stringify(makeCatalog(models), null, 2) + "\n");
@@ -1085,8 +1089,9 @@ async function main(argv = process.argv.slice(2)) {
   const config = await readJson(privateFile);
   if (action === "status") {
     const result = await fetch(`http://127.0.0.1:${config.port}/health`, { headers: { Authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(3e3) });
-    if (!result.ok) throw new Error("The local provider did not pass its health check.");
-    console.log(JSON.stringify(await result.json(), null, 2));
+    const health = result.ok ? await result.json() : null;
+    if (health?.ready !== true) throw new Error("The local provider did not pass its health check.");
+    console.log(JSON.stringify(health, null, 2));
     return;
   }
   if (!["enable", "disable"].includes(action)) throw new Error("Unknown native command. Use --help.");
@@ -1096,9 +1101,17 @@ async function main(argv = process.argv.slice(2)) {
   try {
     const text = await exists(configPath) ? await readFile(configPath, "utf8") : "";
     if (action === "enable") {
-      if (await exists(stateFile)) throw new Error("Muse native mode is already enabled; disable it before enabling again.");
       const health = await fetch(`http://127.0.0.1:${config.port}/health`, { headers: { Authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(3e3) });
-      if (!health.ok) throw new Error("Start the local Muse provider before enabling it.");
+      if (!health.ok || (await health.json()).ready !== true) throw new Error("Start the local Muse provider before enabling it.");
+      if (await exists(stateFile)) {
+        const restore = await readJson(stateFile);
+        if (restore.configPath !== configPath) throw new Error("The restore record belongs to a different Codex configuration.");
+        const original = disableConfig(text, restore);
+        const expected = enableConfig(original, { model: config.models[0], catalogPath, ...config });
+        if (expected.restore.header !== restore.header || expected.restore.provider !== restore.provider) throw new Error("Native service settings changed. Disable before enabling the new configuration.");
+        console.log("Muse native mode is already enabled. Existing settings and the original recovery copy were preserved.");
+        return;
+      }
       const next = enableConfig(text, { model: config.models[0], catalogPath, ...config });
       await atomic(stateFile, JSON.stringify({ configPath, ...next.restore }) + "\n");
       await atomic(configPath, next.text);
@@ -1119,6 +1132,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   process.exitCode = 1;
 });
 export {
+  installationSettings,
   main
 };
 /*! Bundled license information:

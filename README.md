@@ -14,10 +14,27 @@ Codex bundles the complete collection. Hermes/OpenCode accept `--skills implemen
 
 Repository: [danny-hines/muse-code-bridge](https://github.com/danny-hines/muse-code-bridge).
 
-Run on the computer where you use your host app. Codex is the default:
+**New here? Share the [quick setup guide](docs/setup.md)**. It includes a one-command install, copy-ready prompts for an agent, and instructions for switching back.
+
+Choose how you want Muse to participate:
+
+| Goal | Setup |
+|---|---|
+| Keep Astra or your current model in charge; ask Muse to implement or review | Standard MCP plugin, below; macOS and Linux |
+| Select Muse as the main model for new local Codex tasks | Experimental native provider; automatic setup on macOS |
+
+For **Muse as the main Codex model** on a Mac, with your own Muse account:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --native --auth account --login
+```
+
+Complete the official Muse sign-in, fully quit Codex (Cmd+Q), reopen it, and start a new local task. Setup installs missing dependencies, the MCP plugin, and the local native service; it discovers models, checks service health, and saves the previous Codex selection before enabling Muse. **This selects a separate provider configuration; it does not add Muse alongside Astra with seamless switching.** Native mode supports text and tool handoffs; images are unsupported and full browser/desktop compatibility is unverified. See [native mode limits and recovery](docs/native-provider.md).
+
+For **Muse as a collaborator**, run on the computer where you use your host app. Codex is the default:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --auth account --login
 ```
 
 Select another host, or repeat `--host` to install several:
@@ -38,7 +55,7 @@ Use `--login` to run login explicitly or `--no-login` to skip optional login. Me
 | Hermes | `mcp_servers.muse_code_bridge` | [Setup and usage](integrations/hermes/README.md) |
 | OpenCode 1 / 2 beta | Version-aware `muse_code_bridge` MCP entry | [Setup and usage](integrations/opencode/README.md) |
 
-After installation, restart the selected host and start a new **local** conversation in your project. For Codex, fully quit the app (Cmd+Q on macOS) and reopen it, then enable **Muse Code Bridge** in the plugins picker. Ask:
+After installing collaborator mode, restart the selected host and start a new **local** conversation in your project. For Codex, fully quit the app (Cmd+Q on macOS) and reopen it, then enable **Muse Code Bridge** in the plugins picker. Ask:
 
 > Ask Muse to review my changes. Compare its findings with yours and verify the disagreements.
 
@@ -69,7 +86,7 @@ Add `--check` for a read-only preflight or `--login` for Muse login. macOS users
 
 The bootstrap keeps source at `~/.local/share/muse-bridge/repo` and managed dependencies under `runtime/`. This established path is retained across the project rename so existing session metadata stays available. Reruns refuse to overwrite modified source, unrelated directories, or conflicting host entries. Hermes/OpenCode config changes create private backups and preserve unrelated settings and comments.
 
-Rerun the same bootstrap command to update, or use `git pull --ff-only` and `./install.sh --host …` for a clone. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
+Rerun the same bootstrap command to update, or use `git pull --ff-only` and `./install.sh --host …` for a clone. Use `--no-login` once signed in and omit `--auth` to preserve the current credential choice. Include `--native` to refresh and enable the native service, between active requests. Native reruns preserve the installed model set, port, and original recovery copy. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
 
 After updating, wait for current work to finish and fully quit and reopen your host. Existing Codex conversations can retain the old bridge server despite newer files being installed. `muse_status` reports the actual running `bridge_version`, `bridge_build`, and `bridge_started_at` for troubleshooting; older releases omit these diagnostics.
 
