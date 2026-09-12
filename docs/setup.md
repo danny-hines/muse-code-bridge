@@ -4,7 +4,7 @@ Share this page: **https://github.com/danny-hines/muse-code-bridge/blob/main/doc
 
 The installer is the supported setup path. Run it yourself or ask your desktop agent to run the same script. Each person signs in to their own Muse account; the repository contains no account credentials and needs no hosted relay.
 
-**The working desktop integration is Muse as a collaborator through MCP tools and skills. Adding Muse alongside Astra/OpenAI models in the existing model picker is not implemented.** The experimental native adapter replaces the active provider and catalog when explicitly enabled, hiding the normal model options. Its protocol tests do not establish full desktop picker routing.
+**The working desktop integration is Muse as a collaborator through MCP tools and skills. Adding Muse alongside Astra/OpenAI models in the existing model picker is not implemented.** Global provider replacement has been withdrawn. The intended native feature is one picker containing both providers, with automatic catalog updates; see the [requirements and implementation status](additive-models.md).
 
 ## Keep your model options and use Muse as a collaborator
 
@@ -52,11 +52,11 @@ For a clone, use `node dist/muse-native.mjs disable` from that checkout. This re
 
 Installing or updating the collaborator plugin does not automatically disable previously enabled replacement mode. Use the restore command first when returning to your previous provider. Start a new task after restarting so the provider and model selection agree.
 
-## Experimental native adapter
+## Native model selection is not available yet
 
-On macOS, `--native` prepares and checks the local native service while preserving the current model/provider selection. It does **not** append Muse to the current picker. Activation requires a separate, explicit `--replace-provider` option and hides the normal model options. The direct helper likewise requires `enable --replace-provider`. See the [native guide](native-provider.md) before choosing replacement mode.
+The old `--native`, `--replace-provider`, and direct `enable` commands refuse before making changes. They cannot add Muse to the existing picker. Recovery with `disable` remains available for earlier installations.
 
-The adapter supports text and tool handoffs at the app-server level, with buffered replies. Images, screenshots, audio, and uploaded file inputs are unsupported. Full in-app browser, desktop feature compatibility, and desktop picker request routing remain unverified.
+The retained [protocol prototype](native-provider.md) supports text and tool handoffs in isolated app-server tests. It does not establish desktop picker routing or automatic model discovery. A native installation will need to meet the [additive model requirements](additive-models.md) before it is offered again.
 
 ## Subscription or API
 
@@ -73,6 +73,6 @@ This assumes the key file already exists. API mode skips account login; only the
 
 ## Updates
 
-Wait until active work finishes, then rerun the bootstrap. Omit `--auth` and use `--no-login` to keep your saved credential choice without signing in again. Add `--native` only to refresh the optional native service; this preserves the active model/provider selection. Restart the desktop app afterward. The installer refuses to replace locally modified source or conflicting managed settings.
+Wait until active work finishes, then rerun the bootstrap. Omit `--auth` and use `--no-login` to keep your saved credential choice without signing in again. Restart the desktop app afterward. The installer refuses to replace locally modified source or conflicting managed settings.
 
 This is an independent community project, not an official Meta or OpenAI desktop integration.

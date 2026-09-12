@@ -216,58 +216,27 @@ test('invalid host arguments stop before downloads or configuration changes', as
   assert.equal(await exists(s.root), false);
 });
 
-test('native preparation installs dependencies and logs in without changing the active model provider', async t => {
+test('fresh account setup installs dependencies and performs official login exactly once', async t => {
   const s = await setup(t, { missing: true, platform: 'darwin' });
-  const result = await s.run('--native', '--auth', 'account', '--login');
-  assert.match(result.stdout, /active model\/provider selection was preserved/);
-  assert.match(result.stdout, /does not add Muse to the existing model picker/);
+  const result = await s.run('--auth', 'account', '--login');
   const calls = await s.calls();
   assert.equal(calls.filter(c => c.tool === 'curl').length, 5);
   assert.equal(calls.filter(c => c.tool === 'muse' && c.args[0] === 'login').length, 1);
-  assert.ok(calls.findIndex(c => c.args[0] === 'login') < calls.findIndex(c => c.tool === 'native'));
-  assert.deepEqual(calls.filter(c => c.tool === 'native').map(c => c.args), ['install', 'status'].map(action => [action, '--root', join(s.root, 'native')]));
+  assert.ok(!calls.some(c => c.tool === 'native'));
   assert.match(result.stdout, /Muse-managed account credentials/);
-  // Account is the fresh-install default, so no connection file is necessary.
   assert.equal(await exists(s.env.MUSE_BRIDGE_CONNECTION_FILE), false);
 });
 
-test('native activation requires an explicit provider replacement choice', async t => {
-  const s = await setup(t, { platform: 'darwin' });
-  await assert.rejects(s.run('--replace-provider'), /requires --native/);
-  assert.deepEqual(await s.calls(), []);
-  assert.equal(await exists(s.root), false);
-  const result = await s.run('--native', '--replace-provider');
-  assert.match(result.stdout, /normal model options are hidden/);
-  assert.match(result.stdout, /disable --root/);
-  assert.deepEqual((await s.calls()).filter(c => c.tool === 'native').map(c => c.args), [
-    ['install', '--root', join(s.root, 'native')],
-    ['status', '--root', join(s.root, 'native')],
-    ['enable', '--replace-provider', '--root', join(s.root, 'native')],
-  ]);
-});
-
-test('native API setup skips login and stops before enabling when the health check fails', async t => {
-  const s = await setup(t, { platform: 'darwin' });
-  const key = join(s.dir, 'key');
-  await writeFile(key, 'fixture-key', { mode: 0o600 });
-  s.env.BOOTSTRAP_TEST_NATIVE_FAIL = 'status';
-  await assert.rejects(s.run('--native', '--replace-provider', '--auth', 'api-key', '--api-key-file', key), e => {
-    assert.match(e.stderr, /Fixture native failure/);
-    assert.doesNotMatch(e.stdout, /Setup finished/);
-    return true;
+for (const platform of ['darwin', 'linux']) {
+  test(`withdrawn native bootstrap flags refuse before downloads or changes on ${platform}`, async t => {
+    const s = await setup(t, { platform });
+    for (const flags of [
+      ['--native'], ['--replace-provider'], ['--native', '--replace-provider'],
+      ['--native', '--host', 'hermes'], ['--native', '--host', 'codex', '--host', 'opencode'],
+    ]) {
+      await assert.rejects(s.run(...flags), /activation has been withdrawn/);
+      assert.deepEqual(await s.calls(), []);
+      assert.equal(await exists(s.root), false);
+    }
   });
-  const calls = await s.calls();
-  assert.ok(!calls.some(c => c.args[0] === 'login'));
-  assert.deepEqual(calls.filter(c => c.tool === 'native').map(c => c.args[0]), ['install', 'status']);
-  assert.equal(JSON.parse(await readFile(s.env.MUSE_BRIDGE_CONNECTION_FILE)).mode, 'api-key');
-  assert.equal(await exists(join(s.root, '.bootstrap-lock')), false);
-});
-
-test('unsupported native platforms and hosts are rejected before any installation', async t => {
-  const s = await setup(t, { platform: 'linux' });
-  await assert.rejects(s.run('--native'), /automatic setup requires macOS/);
-  await assert.rejects(s.run('--native', '--host', 'hermes'), /supports Codex only/);
-  await assert.rejects(s.run('--native', '--host', 'codex', '--host', 'opencode'), /supports Codex only/);
-  assert.deepEqual(await s.calls(), []);
-  assert.equal(await exists(s.root), false);
-});
+}

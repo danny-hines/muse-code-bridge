@@ -2,7 +2,7 @@
 
 Call Muse Code from **Codex / ChatGPT desktop, Hermes, or OpenCode**, using your Muse Code subscription or an explicit pay-as-you-go API key. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation.
 
-The default integration uses one shared MCP server connected to the official `muse serve` process. Each host gets its own installer and instructions. Muse is a collaborator: the host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse. The [experimental native adapter](docs/native-provider.md) has passed Codex app-server protocol tests, but it does not add Muse alongside the existing desktop models. Global activation replaces the provider and catalog; desktop routing still needs an end-to-end check.
+The default integration uses one shared MCP server connected to the official `muse serve` process. Each host gets its own installer and instructions. Muse is a collaborator: the host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse. The [protocol prototype](docs/native-provider.md) has passed isolated Codex app-server tests. Its former global activation path has been withdrawn because it replaced the existing model options. An [additive picker with automatic model discovery](docs/additive-models.md) is the intended native integration; it is not implemented yet.
 
 Community integration, built against Muse Code **1.0.3 (1.0.3-R2198.1)** and Muse Session Protocol v1. This repository contains no credentials and no hosted relay.
 
@@ -16,9 +16,7 @@ Repository: [danny-hines/muse-code-bridge](https://github.com/danny-hines/muse-c
 
 **New here? Share the [quick setup guide](docs/setup.md)**. It includes a one-command install, copy-ready prompts for an agent, and instructions for switching back.
 
-**Adding Muse to the existing Astra/OpenAI model picker is not implemented.** Use the MCP plugin to keep your existing model options while asking Muse to implement or review. The experimental native adapter can replace the active provider and catalog, which hides the normal model options; it is not an additive picker integration.
-
-The `--native` flag now only prepares and checks the native service. Global activation requires the separate `--replace-provider` option. See [native mode limits and recovery](docs/native-provider.md) before choosing replacement mode.
+**Adding Muse to the existing Astra/OpenAI model picker is not implemented.** The supported installation keeps your existing model options and adds Muse MCP tools and skills. Legacy native activation commands now stop without changing settings. If an earlier installation hid your models, follow the [recovery instructions](docs/native-provider.md#switching-back-and-updates).
 
 For **Muse as a collaborator**, run on the computer where you use your host app. Codex is the default:
 
@@ -75,7 +73,7 @@ Add `--check` for a read-only preflight or `--login` for Muse login. macOS users
 
 The bootstrap keeps source at `~/.local/share/muse-bridge/repo` and managed dependencies under `runtime/`. This established path is retained across the project rename so existing session metadata stays available. Reruns refuse to overwrite modified source, unrelated directories, or conflicting host entries. Hermes/OpenCode config changes create private backups and preserve unrelated settings and comments.
 
-Rerun the same bootstrap command to update, or use `git pull --ff-only` and `./install.sh --host …` for a clone. Use `--no-login` once signed in and omit `--auth` to preserve the current credential choice. Include `--native` to refresh the native service between active requests while preserving the current model/provider selection. Only an explicit `--replace-provider` also activates it. Native reruns preserve the installed model set, port, and original recovery copy. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
+Rerun the same bootstrap command to update, or use `git pull --ff-only` and `./install.sh --host …` for a clone. Use `--no-login` once signed in and omit `--auth` to preserve the current credential choice. Native activation flags are withdrawn; use the recovery command above if an earlier version replaced your provider. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
 
 After updating, wait for current work to finish and fully quit and reopen your host. Existing Codex conversations can retain the old bridge server despite newer files being installed. `muse_status` reports the actual running `bridge_version`, `bridge_build`, and `bridge_started_at` for troubleshooting; older releases omit these diagnostics.
 

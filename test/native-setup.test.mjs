@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { main, installationSettings } from '../scripts/native.mjs';
+import { enableConfig } from '../src/native-config.mjs';
 
 test('native updates preserve custom port and model order when the upstream default changes', () => {
   const previous = { port: 49001, models: ['muse-b', 'muse-a'] };
@@ -44,55 +45,72 @@ async function setup(t) {
   };
 }
 
-test('enabling again preserves the original recovery copy and unrelated config edits', async t => {
+// Reproduce legacy installations without exposing an activation command to users.
+async function legacyInstallation(s) {
+  const result = enableConfig(s.original, {
+    model: s.config.models[0], port: s.config.port, token: s.config.token,
+    catalogPath: join(s.root, 'models.json'),
+  });
+  await writeFile(s.configPath, result.text);
+  await writeFile(s.stateFile, JSON.stringify({ ...result.restore, configPath: s.configPath }));
+  return result.text;
+}
+
+test('legacy recovery preserves unrelated edits without requiring a working service or provider settings', async t => {
   const s = await setup(t);
-  await s.run('enable', '--replace-provider');
-  const recovery = await readFile(s.stateFile, 'utf8');
-  const edited = (await readFile(s.configPath, 'utf8')).replace('multi_agent = true', 'multi_agent = false');
-  await writeFile(s.configPath, edited);
-  await s.run('enable', '--replace-provider');
-  assert.equal(await readFile(s.stateFile, 'utf8'), recovery);
-  assert.equal(await readFile(s.configPath, 'utf8'), edited);
+  const enabled = await legacyInstallation(s);
+  await writeFile(s.configPath, enabled.replace('multi_agent = true', 'multi_agent = false'));
+  await rm(s.privateFile);
+  s.ready(false);
   await s.run('disable');
   const restored = await readFile(s.configPath, 'utf8');
   assert.match(restored, /model = "astra"/);
   assert.match(restored, /model_reasoning_effort = "xhigh"/);
   assert.match(restored, /multi_agent = false/);
   await assert.rejects(access(s.stateFile));
+  await assert.rejects(access(`${s.configPath}.muse-native.lock`));
 });
 
-test('a non-ready service never enables the provider or reports successful status', async t => {
+test('legacy recovery restores untouched configuration exactly', async t => {
+  const s = await setup(t);
+  await legacyInstallation(s);
+  await s.run('disable');
+  assert.equal(await readFile(s.configPath, 'utf8'), s.original);
+});
+
+test('a non-ready service never reports successful status', async t => {
   const s = await setup(t);
   s.ready(false);
-  await assert.rejects(s.run('enable', '--replace-provider'), /Start the local Muse provider/);
   await assert.rejects(s.run('status'), /health check/);
   assert.equal(await readFile(s.configPath, 'utf8'), s.original);
   await assert.rejects(access(s.stateFile));
-  await assert.rejects(access(`${s.configPath}.muse-native.lock`));
 });
 
-test('rerun refuses mismatched service settings and manually changed managed blocks', async t => {
+test('legacy recovery refuses manually changed managed settings or a mismatched config path', async t => {
   const s = await setup(t);
-  await s.run('enable', '--replace-provider');
+  const enabled = await legacyInstallation(s);
   const recovery = await readFile(s.stateFile, 'utf8');
-  const enabled = await readFile(s.configPath, 'utf8');
-  await writeFile(s.privateFile, JSON.stringify({ ...s.config, models: ['muse-b'] }));
-  await assert.rejects(s.run('enable', '--replace-provider'), /service settings changed/);
-  assert.equal(await readFile(s.configPath, 'utf8'), enabled);
-  await writeFile(s.privateFile, JSON.stringify(s.config));
   const edited = enabled.replace('model = "muse-a"', 'model = "manual-choice"');
   await writeFile(s.configPath, edited);
-  await assert.rejects(s.run('enable', '--replace-provider'), /Managed Muse settings changed/);
+  await assert.rejects(s.run('disable'), /Managed Muse settings changed/);
   assert.equal(await readFile(s.configPath, 'utf8'), edited);
   assert.equal(await readFile(s.stateFile, 'utf8'), recovery);
+  await writeFile(s.configPath, enabled);
+  const mismatched = JSON.stringify({ ...JSON.parse(recovery), configPath: join(s.root, 'other.toml') });
+  await writeFile(s.stateFile, mismatched);
+  await assert.rejects(s.run('disable'), /different Codex configuration/);
+  assert.equal(await readFile(s.configPath, 'utf8'), enabled);
+  assert.equal(await readFile(s.stateFile, 'utf8'), mismatched);
+  await assert.rejects(access(`${s.configPath}.muse-native.lock`));
 });
 
-
-test('plain enable refuses replacement before contacting the service or writing recovery data', async t => {
+test('all legacy enable commands refuse before reading provider files or changing configuration', async t => {
   const s = await setup(t);
-  s.ready(false);
-  await assert.rejects(s.run('enable'), /REPLACES the active provider/);
-  assert.equal(await readFile(s.configPath, 'utf8'), s.original);
-  await assert.rejects(access(s.stateFile));
-  await assert.rejects(access(`${s.configPath}.muse-native.lock`));
+  await rm(s.privateFile);
+  for (const flags of [[], ['--replace-provider']]) {
+    await assert.rejects(s.run('enable', ...flags), /activation has been withdrawn/);
+    assert.equal(await readFile(s.configPath, 'utf8'), s.original);
+    await assert.rejects(access(s.stateFile));
+    await assert.rejects(access(`${s.configPath}.muse-native.lock`));
+  }
 });

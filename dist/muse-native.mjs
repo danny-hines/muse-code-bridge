@@ -157,10 +157,10 @@ var MuseHost = class extends EventEmitter {
       this.close();
       return;
     }
-    let end2;
-    while ((end2 = this.buffer.indexOf("\n")) !== -1) {
-      const line = this.buffer.slice(0, end2);
-      this.buffer = this.buffer.slice(end2 + 1);
+    let end;
+    while ((end = this.buffer.indexOf("\n")) !== -1) {
+      const line = this.buffer.slice(0, end);
+      this.buffer = this.buffer.slice(end + 1);
       if (!line.trim()) continue;
       let message;
       try {
@@ -420,9 +420,9 @@ function skipVoid(ctx, banNewLines, banComments) {
     skipComment(ctx);
   }
 }
-function skipUntil(ctx, sep, end2) {
+function skipUntil(ctx, sep, end) {
   let ptr = ctx.p;
-  if (!end2) {
+  if (!end) {
     ptr = indexOfNewline(ctx.s, ptr);
     ctx.p = ptr < 0 ? ctx.s.length : ptr;
     return;
@@ -431,7 +431,7 @@ function skipUntil(ctx, sep, end2) {
     let c = ctx.s.charCodeAt(ctx.p);
     if (c === 35) {
       skipComment(ctx);
-    } else if (c === end2 || c === sep) {
+    } else if (c === end || c === sep) {
       return;
     }
   }
@@ -548,8 +548,8 @@ function parseString(ctx) {
   }
   throw new TomlError("unfinished string", { toml: ctx.s, ptr: start });
 }
-function sliceAndTrimEndOf(ctx, start, end2) {
-  let value = ctx.s.slice(start, end2);
+function sliceAndTrimEndOf(ctx, start, end) {
+  let value = ctx.s.slice(start, end);
   let commentIdx = value.indexOf("#");
   if (commentIdx > 0) {
     skipComment({ s: value, p: commentIdx, d: 0 });
@@ -557,10 +557,10 @@ function sliceAndTrimEndOf(ctx, start, end2) {
   }
   return value.trimEnd();
 }
-function parseValue(ctx, integersAsBigInt, end2) {
+function parseValue(ctx, integersAsBigInt, end) {
   let ptr = ctx.p;
   let err = { toml: ctx.s, ptr };
-  skipUntil(ctx, 44, end2);
+  skipUntil(ctx, 44, end);
   let value = sliceAndTrimEndOf(ctx, ptr, ctx.p);
   if (!value)
     throw new TomlError("incomplete declaration: value expected", err);
@@ -598,7 +598,7 @@ function parseValue(ctx, integersAsBigInt, end2) {
 }
 
 // node_modules/smol-toml/dist/extract.js
-function extractValue(ctx, end2, integersAsBigInt) {
+function extractValue(ctx, end, integersAsBigInt) {
   let ptr = ctx.p;
   let c = ctx.s.charCodeAt(ptr);
   if (c === 91 || c === 123) {
@@ -627,16 +627,16 @@ function extractValue(ctx, end2, integersAsBigInt) {
     ctx.p++;
     return false;
   }
-  return parseValue(ctx, integersAsBigInt, end2);
+  return parseValue(ctx, integersAsBigInt, end);
 }
 
 // node_modules/smol-toml/dist/struct.js
 var KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
-function parseKey(ctx, end2 = "=") {
+function parseKey(ctx, end = "=") {
   let start = ctx.p;
   let dot = start - 1;
   let parsed = [];
-  let endPtr = ctx.s.indexOf(end2, start);
+  let endPtr = ctx.s.indexOf(end, start);
   if (endPtr < 0) {
     throw new TomlError("incomplete key-value: cannot find end of key", {
       toml: ctx.s,
@@ -670,7 +670,7 @@ function parseKey(ctx, end2 = "=") {
           });
         }
         if (endPtr < ctx.p) {
-          endPtr = ctx.s.indexOf(end2, ctx.p);
+          endPtr = ctx.s.indexOf(end, ctx.p);
           if (endPtr < 0) {
             throw new TomlError("incomplete key-value: cannot find end of key", {
               toml: ctx.s,
@@ -902,62 +902,6 @@ function parse(toml, { maxDepth = 1e3, integersAsBigInt } = {}) {
 // src/native-config.mjs
 var keys = ["model", "model_provider", "model_catalog_json", "model_reasoning_effort", "web_search"];
 var selectedLine = new RegExp(`^\\s*(${keys.join("|")})\\s*=`);
-var begin = "# BEGIN MUSE NATIVE PROVIDER (managed)";
-var end = "# END MUSE NATIVE PROVIDER (managed)";
-var providerId = "muse_bridge";
-function enableConfig(text, { model, catalogPath, port, token }) {
-  let parsed;
-  try {
-    parsed = parse(text);
-  } catch {
-    throw new Error("Codex configuration is not valid TOML; no settings changed.");
-  }
-  if (text.includes(begin) || parsed.model_providers?.[providerId]) throw new Error("Muse native configuration already exists or conflicts with a provider entry.");
-  const lines = text.split("\n");
-  const removed = [];
-  let inRoot = true;
-  const kept = lines.filter((line, index) => {
-    if (/^\s*\[/.test(line)) inRoot = false;
-    if (!inRoot) return true;
-    const match = line.match(selectedLine);
-    if (!match) return true;
-    try {
-      const value = parse(line)[match[1]];
-      if (typeof value !== "string") throw new Error();
-    } catch {
-      throw new Error("Selected-model configuration uses multiline or complex TOML. Simplify those settings before enabling Muse.");
-    }
-    removed.push({ index, line });
-    return false;
-  });
-  for (const key of keys) if (parsed[key] !== void 0 && !removed.some((x) => new RegExp(`^\\s*${key}\\s*=`).test(x.line))) throw new Error(`Cannot safely replace the existing ${key} setting.`);
-  const header = `${begin}
-model = ${JSON.stringify(model)}
-model_provider = ${JSON.stringify(providerId)}
-model_catalog_json = ${JSON.stringify(catalogPath)}
-model_reasoning_effort = "high"
-web_search = "disabled"
-${end}
-`;
-  const provider = `
-${begin}
-[model_providers.${providerId}]
-name = "Muse Code Bridge (experimental)"
-base_url = "http://127.0.0.1:${port}/v1"
-experimental_bearer_token = ${JSON.stringify(token)}
-wire_api = "responses"
-requires_openai_auth = false
-supports_websockets = false
-request_max_retries = 0
-stream_max_retries = 0
-stream_idle_timeout_ms = 180000
-${end}
-`;
-  const next = header + kept.join("\n") + provider;
-  const actual = parse(next);
-  if (actual.model !== model || actual.model_provider !== providerId) throw new Error("Could not validate Muse provider configuration.");
-  return { text: next, restore: { header, provider, removed, original: text } };
-}
 function disableConfig(text, restore) {
   if (!text.startsWith(restore.header) || !text.endsWith(restore.provider)) throw new Error("Managed Muse settings changed. Restore them from the backup manually; no config was overwritten.");
   const rest = text.slice(restore.header.length, -restore.provider.length);
@@ -973,15 +917,13 @@ function disableConfig(text, restore) {
 var help = `Experimental Muse provider for Codex
 
 node dist/muse-native.mjs install [--model ID] [--port 47831]
-node dist/muse-native.mjs enable --replace-provider
 node dist/muse-native.mjs disable
 node dist/muse-native.mjs status
 
 Install prepares the catalog and starts a localhost service on macOS.
-Enable REPLACES the active provider and hides the normal model options.
-Additive model selection is not implemented; desktop routing is not fully verified.
-Disable restores the previous selection.
-Restart the desktop app after enable/disable. Existing MCP skills remain installed.
+Global activation is withdrawn. This is a standalone protocol prototype, not a desktop model-picker integration.
+Disable restores the previous selection for legacy installations.
+Restart the desktop app after disable. Existing MCP skills remain installed.
 On other systems, run the printed server command in a terminal or service manager.
 `;
 var xml = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
@@ -1027,7 +969,7 @@ async function main(argv = process.argv.slice(2)) {
     console.log(help);
     return;
   }
-  if (action === "enable" && !values["replace-provider"]) throw new Error("Native activation REPLACES the active provider and hides the normal model options. Adding Muse alongside them is not implemented. Only use enable --replace-provider if you explicitly want replacement mode; desktop routing remains unverified. No settings changed.");
+  if (action === "enable") throw new Error("Global native activation has been withdrawn because it replaces the existing model options. Additive provider routing is not implemented. Use the MCP plugin; disable remains available for recovery. No settings changed.");
   const root = resolve(values.root || join3(process.env.MUSE_BRIDGE_ROOT || join3(homedir3(), ".local/share/muse-bridge"), "native"));
   const configPath = resolve(values["codex-config"] || join3(process.env.CODEX_HOME || join3(homedir3(), ".codex"), "config.toml"));
   const privateFile = join3(root, "provider.json"), catalogPath = join3(root, "models.json"), stateFile = join3(root, "codex-restore.json");
@@ -1044,8 +986,8 @@ async function main(argv = process.argv.slice(2)) {
     const discovered = [...catalog.models].sort((a, b) => Number(b.isDefault) - Number(a.isDefault)).map((m) => m.modelId);
     const { port, models } = installationSettings(previous, values, discovered, Boolean(await exists(stateFile)));
     await mkdir(root, { recursive: true, mode: 448 });
-    const config2 = { port, token: previous?.token || randomBytes(32).toString("hex"), models };
-    await atomic(privateFile, JSON.stringify(config2) + "\n");
+    const config = { port, token: previous?.token || randomBytes(32).toString("hex"), models };
+    await atomic(privateFile, JSON.stringify(config) + "\n");
     await atomic(catalogPath, JSON.stringify(makeCatalog(models), null, 2) + "\n");
     const sourceDir = dirname(fileURLToPath(import.meta.url));
     const source = join3(sourceDir, "muse-native-server.mjs");
@@ -1076,7 +1018,7 @@ async function main(argv = process.argv.slice(2)) {
       let ready = false;
       for (let attempt = 0; attempt < 30 && !ready; attempt++) {
         try {
-          const result = await fetch(`http://127.0.0.1:${port}/health`, { headers: { Authorization: `Bearer ${config2.token}` }, signal: AbortSignal.timeout(500) });
+          const result = await fetch(`http://127.0.0.1:${port}/health`, { headers: { Authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(500) });
           ready = result.ok && (await result.json()).ready === true;
         } catch {
         }
@@ -1087,45 +1029,28 @@ async function main(argv = process.argv.slice(2)) {
     } else console.log(`Start the provider with: node ${JSON.stringify(join3(root, "server.mjs"))} --config ${JSON.stringify(privateFile)}`);
     console.log("Models: " + models.join(", "));
     console.log("Current Codex model settings were preserved. Additive model selection is not implemented.");
-    console.log("Explicit replacement only: node dist/muse-native.mjs enable --replace-provider (hides normal model options).");
+    console.log("This standalone protocol prototype cannot be activated as a desktop model-picker integration.");
     return;
   }
-  const config = await readJson(privateFile);
   if (action === "status") {
+    const config = await readJson(privateFile);
     const result = await fetch(`http://127.0.0.1:${config.port}/health`, { headers: { Authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(3e3) });
     const health = result.ok ? await result.json() : null;
     if (health?.ready !== true) throw new Error("The local provider did not pass its health check.");
     console.log(JSON.stringify(health, null, 2));
     return;
   }
-  if (!["enable", "disable"].includes(action)) throw new Error("Unknown native command. Use --help.");
+  if (action !== "disable") throw new Error("Unknown native command. Use --help.");
   await mkdir(dirname(configPath), { recursive: true });
   const lock = `${configPath}.muse-native.lock`;
   const handle = await import("node:fs/promises").then((fs) => fs.open(lock, "wx", 384));
   try {
     const text = await exists(configPath) ? await readFile(configPath, "utf8") : "";
-    if (action === "enable") {
-      const health = await fetch(`http://127.0.0.1:${config.port}/health`, { headers: { Authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(3e3) });
-      if (!health.ok || (await health.json()).ready !== true) throw new Error("Start the local Muse provider before enabling it.");
-      if (await exists(stateFile)) {
-        const restore = await readJson(stateFile);
-        if (restore.configPath !== configPath) throw new Error("The restore record belongs to a different Codex configuration.");
-        const original = disableConfig(text, restore);
-        const expected = enableConfig(original, { model: config.models[0], catalogPath, ...config });
-        if (expected.restore.header !== restore.header || expected.restore.provider !== restore.provider) throw new Error("Native service settings changed. Disable before enabling the new configuration.");
-        console.log("Muse native mode is already enabled. Existing settings and the original recovery copy were preserved.");
-        return;
-      }
-      const next = enableConfig(text, { model: config.models[0], catalogPath, ...config });
-      await atomic(stateFile, JSON.stringify({ configPath, ...next.restore }) + "\n");
-      await atomic(configPath, next.text);
-    } else {
-      const restore = await readJson(stateFile);
-      if (restore.configPath !== configPath) throw new Error("The restore record belongs to a different Codex configuration.");
-      await atomic(configPath, disableConfig(text, restore));
-      await unlink(stateFile);
-    }
-    console.log(`${action === "enable" ? "Enabled Muse for new Codex tasks" : "Restored the previous Codex model/provider selection"}. Fully quit and reopen the desktop app.`);
+    const restore = await readJson(stateFile);
+    if (restore.configPath !== configPath) throw new Error("The restore record belongs to a different Codex configuration.");
+    await atomic(configPath, disableConfig(text, restore));
+    await unlink(stateFile);
+    console.log("Restored the previous Codex model/provider selection. Fully quit and reopen the desktop app.");
   } finally {
     await handle.close();
     await unlink(lock);
