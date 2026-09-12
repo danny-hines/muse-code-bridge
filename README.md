@@ -2,7 +2,7 @@
 
 Call Muse Code from **Codex / ChatGPT desktop, Hermes, or OpenCode**, using your Muse Code subscription or an explicit pay-as-you-go API key. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation.
 
-One shared MCP server connects to the official `muse serve` process. Each host gets its own installer and instructions. **Muse is a collaborator, not a new entry in your host's model picker.** The host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse.
+The default integration uses one shared MCP server connected to the official `muse serve` process. Each host gets its own installer and instructions. Muse is a collaborator: the host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse. An optional [experimental native provider for Codex](docs/native-provider.md) makes Muse the primary model through a separate provider configuration.
 
 Community integration, built against Muse Code **1.0.3 (1.0.3-R2198.1)** and Muse Session Protocol v1. This repository contains no credentials and no hosted relay.
 
@@ -133,7 +133,7 @@ Choosing API authentication does **not** choose a Contributor model. Ask the hos
 
 Starts and follow-ups return quickly. Polls wait at most 20 seconds; the host collects results and displays them in the conversation. Each turn has a ten-minute limit and is interrupted when the limit is reached. The MCP connection must remain alive while work runs. Closing the host process ends active work; durable Muse conversations can be resumed later. A session held by another Muse host must be released there before it can be resumed here.
 
-Current-turn output is bounded (up to 80 items and about 60,000 characters). Long individual messages are explicitly truncated. If Muse supplies only paged history, `history_partial` is true. The bridge deliberately excludes reasoning items. There is no dedicated Muse chat panel, token-by-token host UI, automatic debate loop, direct browser-tool forwarding, cloud relay, or native model-picker integration in this release.
+Current-turn MCP output is bounded (up to 80 items and about 60,000 characters). Long individual messages are explicitly truncated. If Muse supplies only paged history, `history_partial` is true. The bridge deliberately excludes reasoning items. The MCP plugin does not add a dedicated Muse chat panel, token-by-token host UI, automatic debate loop, direct browser-tool forwarding, cloud relay, or model-picker registration. See the separate experimental provider below.
 
 ## Architecture and provider support
 
@@ -151,7 +151,9 @@ install.sh                   Checkout installer and host preflight
 
 The build produces `dist/muse-server.mjs`, a bundled host configuration helper, and the same MCP server inside the Codex package. Host configuration uses absolute executable paths; no API service needs to stay running outside the host.
 
-**Native provider mode is not implemented.** Codex [custom model providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers), Hermes [external-process provider plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin#external-process-acp-providers), and OpenCode [custom providers](https://opencode.ai/docs/providers/#custom-provider) are separate integration surfaces. A future adapter would need to translate messages, streaming, tool calls/results, and cancellation while preserving Muse's official authentication path. A working MCP bridge does not establish that native provider mode or desktop model-picker registration works.
+**Codex native provider mode is experimental and opt-in.** See [installation, switching back, and limitations](docs/native-provider.md). It exposes a local Responses endpoint, discovers Muse models for Codex's catalog, and translates prompted JSON tool handoffs through the official CLI. A live Codex → Muse → Codex tool → Muse round trip has passed. It currently supports text, buffers responses, and selects one provider configuration; seamless Astra/Muse routing in one menu is not implemented. It needs a separate local service.
+
+Hermes [external-process provider plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin#external-process-acp-providers) and OpenCode [custom providers](https://opencode.ai/docs/providers/#custom-provider) remain separate, unimplemented native integrations. Their existing MCP integration is unchanged.
 
 ## Validation and supported systems
 

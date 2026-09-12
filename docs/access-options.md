@@ -11,9 +11,9 @@ Checked **September 8, 2026**. Availability, models, and prices can change.
 | Bridge: explicit API key | Muse Code, called by the host | Your additional Meta API key, billed per token | Yes |
 | Native model API provider | The host's own agent | Its configured API provider and key | No; separate provider configuration |
 
-For **Codex plus your Muse Code subscription**, the bridge fits: Codex can collect browser evidence, ask Muse for another approach, then test the result and continue the same Muse conversation. The host keeps its selected model; this MCP integration does not add Muse Spark to Codex's model picker.
+For **Codex plus your Muse Code subscription**, the MCP bridge lets Codex collect browser evidence, ask Muse for another approach, then test the result and continue the same Muse conversation. The host keeps its selected model. The separate [experimental native provider](native-provider.md) selects Muse as the primary model, with text/tool handoffs and significant current compatibility limits.
 
-For **Muse Spark as OpenCode's main model**, try the existing Zen route first. The bridge adds the Muse Code agent alongside OpenCode, with Muse's own sessions, tools, and approvals. These are different agent setups; a shared model family does not imply identical behavior. Native model-provider adapters for this bridge are not implemented. See [OpenCode custom providers](https://opencode.ai/docs/providers/#custom-provider) and [Hermes provider configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration/) for their separate interfaces.
+For **Muse Spark as OpenCode's main model**, try the existing Zen route first. The bridge adds the Muse Code agent alongside OpenCode, with Muse's own sessions, tools, and approvals. These are different agent setups; a shared model family does not imply identical behavior. Native adapters for OpenCode and Hermes are not implemented. See [OpenCode custom providers](https://opencode.ai/docs/providers/#custom-provider) and [Hermes provider configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration/) for their separate interfaces.
 
 ## What is free in OpenCode today?
 

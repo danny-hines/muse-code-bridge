@@ -21509,7 +21509,7 @@ function readConnection(env = process.env) {
 
 // src/build-info.mjs
 var bridgeVersion = true ? "0.1.0" : "source";
-var bridgeBuild = true ? "f334672f28dc95eb" : "source";
+var bridgeBuild = true ? "d54c0f9fe7da5da8" : "source";
 
 // src/msp.mjs
 function uuid7() {

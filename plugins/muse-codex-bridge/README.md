@@ -18,9 +18,9 @@ The plugin includes **muse-implement**, **muse-review**, and the shared **muse**
 
 Use `muse-review` for a second opinion where the host retains implementation. Both specialized skills read the shared Muse protocol. The [skill catalog](https://github.com/danny-hines/muse-code-bridge/blob/main/docs/skills.md) explains the responsibility splits and current limitations. Codex installs all skills together; select the relevant workflow in the conversation.
 
-**This does not add Muse Spark to the model picker.** Your selected Codex model coordinates with Muse through tools. Muse has its own conversation and tools; it does not automatically inherit the desktop browser, other plugins, or the full host conversation. The host can share relevant evidence with Muse.
+**The MCP plugin does not add Muse Spark to the model picker.** Your selected Codex model coordinates with Muse through tools. Muse has its own conversation and tools; it does not automatically inherit the desktop browser, other plugins, or the full host conversation. The host can share relevant evidence with Muse.
 
-Codex supports [custom model providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers), but a Muse CLI-to-model API adapter is separate work. Neither native provider mode nor Muse model-picker registration is implemented here.
+For Muse as the primary model, use the separate [experimental native provider](https://github.com/danny-hines/muse-code-bridge/blob/main/docs/native-provider.md). It installs a local service and custom model catalog, with an explicit enable/disable command. It currently supports text and tool handoffs; it does not combine OpenAI and Muse providers in one automatically routed menu.
 
 ## Update and remove
 
