@@ -5,7 +5,7 @@ main() {
   umask 077
   local root="${MUSE_BRIDGE_ROOT:-$HOME/.local/share/muse-bridge}"
   local ref=main login=auto node_bin muse_bin codex_bin="" npm_bin work os arch archive expected actual
-  local wants_codex=false opencode_version=auto auth='' key_file='' effective_auth
+  local wants_codex=false opencode_version=auto auth='' key_file='' effective_auth skills='' list_skills=false
   local -a host_args=()
   local -a auth_check_args=(--print-mode)
   local node_base=https://nodejs.org/dist/latest-v22.x
@@ -13,9 +13,9 @@ main() {
   local arg
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
-      --auth|--api-key-file)
+      --auth|--api-key-file|--skills)
         [[ "$#" -ge 2 && -n "$2" && "$2" != --* ]] || { echo "$1 requires a value." >&2; return 2; }
-        if [[ "$1" = --auth ]]; then auth="$2"; else key_file="$2"; fi
+        case "$1" in --auth) auth="$2" ;; --api-key-file) key_file="$2" ;; --skills) skills="$2" ;; esac
         shift ;;
       --host)
         [[ "$#" -ge 2 ]] || { echo '--host needs codex, hermes, or opencode.' >&2; return 2; }
@@ -27,6 +27,7 @@ main() {
         shift ;;
       --login) login=yes ;;
       --no-login) login=no ;;
+      --list-skills) list_skills=true ;;
       --help|-h)
         printf '%s\n' 'Usage: bootstrap.sh [--host codex|hermes|opencode] [--login | --no-login]' \
           'Repeat --host for several apps. Defaults to codex.' \
@@ -38,13 +39,25 @@ main() {
           '--auth account|api-key: choose Muse-managed credentials or explicit API billing.' \
           '--api-key-file /absolute/private/file: required with --auth api-key; only the path is saved.' \
           'Omit --auth to preserve the current choice (account on a fresh install).' \
+          '--skills all|core|none|implement,review: select Hermes/OpenCode skills; Codex bundles all.' \
+          'Omit --skills to preserve the selection on updates (all on a fresh install).' \
+          '--list-skills: print the catalog without downloading or installing anything.' \
           'MUSE_BRIDGE_REF selects a Git ref (default main). MUSE_BRIDGE_ROOT changes the local install root.'
         return 0 ;;
       *) printf 'Unknown option: %s\n' "$1" >&2; return 2 ;;
     esac
     shift
   done
+  if [[ "$list_skills" = true ]]; then
+    printf '%s\n' 'muse: Consult Muse; shared session protocol.' \
+      'muse-implement: Muse implements and tests; the host scopes and verifies.' \
+      'muse-review: Muse critiques; the host verifies findings and owns fixes.'
+    return 0
+  fi
   if [[ "${#host_args[@]}" -eq 0 ]]; then host_args=(--host codex); wants_codex=true; fi
+  case "$skills" in ''|all|core|none|implement|review|implement,review|review,implement) ;; *) echo 'Invalid --skills selection. Use all, core, none, implement, or review (comma-separated).' >&2; return 2 ;; esac
+  if [[ "$wants_codex" = true && -n "$skills" && "$skills" != all ]]; then echo 'Codex bundles all skills; selective --skills applies to Hermes/OpenCode.' >&2; return 2; fi
+  [[ -z "$skills" ]] || host_args+=(--skills "$skills")
   case "$auth" in ''|account|api-key) ;; *) echo '--auth must be account or api-key.' >&2; return 2 ;; esac
   [[ -z "$key_file" || "$auth" = api-key ]] || { echo '--api-key-file requires --auth api-key.' >&2; return 2; }
   if [[ -n "$auth" ]]; then host_args+=(--auth "$auth"); auth_check_args+=(--auth "$auth"); fi

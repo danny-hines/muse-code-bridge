@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { configure, serverName } from './configure-host.mjs';
+import { configureSkills } from './configure-skills.mjs';
 import { parse as yaml } from 'yaml';
 import { parse as jsonc } from 'jsonc-parser';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -19,6 +20,12 @@ try {
       opencodeVersion: version,
       env: { ...process.env, MUSE_BRIDGE_HERMES_CONFIG: file, MUSE_BRIDGE_OPENCODE_CONFIG: file },
     });
+    const skillRoot = join(dir, host + version + '-skills');
+    await configureSkills({ host, repo, env: { MUSE_BRIDGE_HERMES_SKILLS_DIR: skillRoot, MUSE_BRIDGE_OPENCODE_SKILLS_DIR: skillRoot } });
+    for (const name of ['muse', 'muse-implement', 'muse-review']) {
+      const skill = await readFile(join(skillRoot, name, 'SKILL.md'), 'utf8');
+      if (!skill.startsWith('---\nname: ' + name + '\n')) throw new Error('Installed skill is missing its discovery metadata.');
+    }
     const contents = await readFile(result.file, 'utf8');
     const data = host === 'hermes' ? yaml(contents) : jsonc(contents);
     const entry = host === 'hermes' ? data.mcp_servers[serverName] : (version === '2' ? data.mcp.servers : data.mcp)[serverName];

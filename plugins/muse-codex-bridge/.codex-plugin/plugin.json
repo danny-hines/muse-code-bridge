@@ -1,6 +1,6 @@
 {
   "name": "muse-codex-bridge",
-  "version": "0.1.0+codex.20260909022647",
+  "version": "0.1.0+codex.20260912052109",
   "description": "Consult, review, and collaborate with your locally authenticated Muse Code from ChatGPT desktop.",
   "author": {
     "name": "Muse Code Bridge contributors"
@@ -20,8 +20,8 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Ask Muse to review my changes and compare its findings with yours.",
-      "Have Muse propose another approach to this problem.",
+      "Use muse-implement for this task: Muse implements and tests; you scope the work and verify the result.",
+      "Use muse-review to review my changes and verify Muse's findings.",
       "Ask Muse to critique this plan, then work through the disagreements."
     ],
     "brandColor": "#2673E8"

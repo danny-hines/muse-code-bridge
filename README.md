@@ -6,6 +6,10 @@ One shared MCP server connects to the official `muse serve` process. Each host g
 
 Community integration, built against Muse Code **1.0.3 (1.0.3-R2198.1)** and Muse Session Protocol v1. This repository contains no credentials and no hosted relay.
 
+The included skills define two responsibility splits: **`muse-implement`** lets Muse implement and test while the host scopes and verifies; **`muse-review`** lets Muse critique while the host verifies findings and owns fixes. The shared **`muse`** skill supports consultation and session handling. See the [skill catalog, installation, and usage](docs/skills.md).
+
+Codex bundles the complete collection. Hermes/OpenCode accept `--skills implement`, `--skills review`, or `--skills all`. Omit the flag to preserve the previous selection on updates (all on a fresh installation). `--list-skills` lists the catalog without contacting Muse.
+
 ## Install
 
 Repository: [danny-hines/muse-code-bridge](https://github.com/danny-hines/muse-code-bridge).

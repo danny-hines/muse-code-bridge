@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { mkdir, readFile, writeFile, copyFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, copyFile, readdir, cp, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -13,7 +13,7 @@ const bridgeBuild = fingerprint.digest('hex').slice(0, 16);
 await mkdir('plugins/muse-codex-bridge/scripts', { recursive: true });
 await mkdir('dist', { recursive: true });
 const result = await build({
-  entryPoints: { 'muse-server': 'src/server.mjs', 'configure-host': 'scripts/configure-host.mjs', 'configure-auth': 'scripts/configure-auth.mjs' },
+  entryPoints: { 'muse-server': 'src/server.mjs', 'configure-host': 'scripts/configure-host.mjs', 'configure-auth': 'scripts/configure-auth.mjs', 'configure-skills': 'scripts/configure-skills.mjs' },
   outdir: 'dist', outExtension: { '.js': '.mjs' },
   bundle: true, platform: 'node', format: 'esm', target: 'node22',
   mainFields: ['module', 'main'],
@@ -45,4 +45,8 @@ await writeFile('dist/THIRD_PARTY_NOTICES.txt', notices.join('\n\n'));
 await copyFile('dist/muse-server.mjs', 'plugins/muse-codex-bridge/scripts/server.mjs');
 await copyFile('integrations/codex/README.md', 'plugins/muse-codex-bridge/README.md');
 await copyFile('LICENSE', 'plugins/muse-codex-bridge/LICENSE');
+for (const destination of ['dist/skills', 'plugins/muse-codex-bridge/skills']) {
+  await rm(destination, { recursive: true, force: true });
+  await cp('skills', destination, { recursive: true });
+}
 console.log(`Built the shared Muse server, host installer, and Codex plugin (${pkg.version}, build ${bridgeBuild}).`);

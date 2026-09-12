@@ -45,6 +45,14 @@ test('installer --check is read-only and never logs in', async t => {
   assert.ok((await s.calls()).every(call => call.args.includes('--help') || call.args[0] === '--version' || call.args[1] === 'list'));
 });
 
+test('skill catalog needs no Muse calls and selective Codex requests fail before mutation', async t => {
+  const s = await setup(t);
+  assert.match((await s.run('--list-skills')).stdout, /muse-implement/);
+  assert.deepEqual(await s.calls(), []);
+  await assert.rejects(s.run('--skills', 'review'), /Codex bundles all skills/);
+  assert.deepEqual(await s.calls(), []);
+});
+
 test('installer registers the checkout before installing the namespaced plugin', async t => {
   const s = await setup(t);
   await s.run();

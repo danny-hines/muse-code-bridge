@@ -2,6 +2,8 @@
 
 This integration adds Muse as an MCP collaborator to OpenCode. It does not add a model provider or install OpenCode itself.
 
+It also installs `muse-implement`, `muse-review`, and their shared `muse` protocol skill under the global OpenCode skills directory. Ask to use `muse-implement` for delegated coding or `muse-review` for a critique. Select workflows with `--skills implement` or `--skills review`; omitted selections persist on updates. Use `--skills none` to remove only unmodified managed skills. See the [skill catalog](../../docs/skills.md) for discovery, custom directories, and update behavior.
+
 If you only want Muse Spark as OpenCode's main model, Zen already offers a free Contributor option as of September 8, 2026. This bridge instead calls the Muse Code agent using your account/subscription or an explicit API key. See the [comparison](../../docs/access-options.md) and [authentication setup](../../README.md#login-and-subscription). API mode adds `--auth api-key --api-key-file /absolute/private/file` to the install command.
 
 ```sh

@@ -12,6 +12,12 @@ After installation, **fully quit Codex (Cmd+Q on macOS) and reopen it**. Start a
 
 > Ask Muse to review my changes, then compare its findings with yours.
 
+The plugin includes **muse-implement**, **muse-review**, and the shared **muse** skill. For delegated coding in another project, start a local task there and ask:
+
+> Use muse-implement to implement the following task. You own scope, architectural decisions, and final verification; Muse owns implementation and routine test fixes: …
+
+Use `muse-review` for a second opinion where the host retains implementation. Both specialized skills read the shared Muse protocol. The [skill catalog](https://github.com/danny-hines/muse-code-bridge/blob/main/docs/skills.md) explains the responsibility splits and current limitations. Codex installs all skills together; select the relevant workflow in the conversation.
+
 **This does not add Muse Spark to the model picker.** Your selected Codex model coordinates with Muse through tools. Muse has its own conversation and tools; it does not automatically inherit the desktop browser, other plugins, or the full host conversation. The host can share relevant evidence with Muse.
 
 Codex supports [custom model providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers), but a Muse CLI-to-model API adapter is separate work. Neither native provider mode nor Muse model-picker registration is implemented here.

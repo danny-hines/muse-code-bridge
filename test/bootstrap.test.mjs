@@ -82,6 +82,7 @@ fs.copyFileSync(file,args[args.indexOf('--output')+1]);
     MUSE_BRIDGE_REF: 'main', BOOTSTRAP_TEST_ROUTES: JSON.stringify(routes),
     BOOTSTRAP_TEST_LOG: log, BOOTSTRAP_TEST_MUSE: muse, BOOTSTRAP_TEST_CODEX: codex,
     META_API_KEY: 'test-only', MUSE_BRIDGE_HERMES_CONFIG: join(dir, 'hermes.yaml'), MUSE_BRIDGE_OPENCODE_CONFIG: join(dir, 'opencode.jsonc'),
+    MUSE_BRIDGE_HERMES_SKILLS_DIR: join(dir, 'hermes-skills'), MUSE_BRIDGE_OPENCODE_SKILLS_DIR: join(dir, 'opencode-skills'),
   };
   t.after(() => rm(dir, { recursive: true, force: true }));
   return {
@@ -102,6 +103,19 @@ test('piped bootstrap reuses existing tools, downloads pinned source, and cleans
   assert.ok(!calls.some(c => c.tool === 'npm' || c.args[0] === 'login'));
   assert.ok(calls.some(c => c.tool === 'codex' && c.args[1] === 'add' && c.args[2] === 'muse-codex-bridge@muse-code-bridge'));
   assert.equal(await exists(join(s.root, '.bootstrap-lock')), false);
+});
+
+test('bootstrap passes skill selection through and preserves it on updates', async t => {
+  const s = await setup(t);
+  await s.run('--host', 'hermes', '--skills', 'implement');
+  await access(join(s.env.MUSE_BRIDGE_HERMES_SKILLS_DIR, 'muse-implement/SKILL.md'));
+  await access(join(s.env.MUSE_BRIDGE_HERMES_SKILLS_DIR, 'muse/SKILL.md'));
+  assert.equal(await exists(join(s.env.MUSE_BRIDGE_HERMES_SKILLS_DIR, 'muse-review')), false);
+  await s.run('--host', 'hermes');
+  assert.equal(await exists(join(s.env.MUSE_BRIDGE_HERMES_SKILLS_DIR, 'muse-review')), false);
+  const before = await s.calls();
+  await s.run('--list-skills');
+  assert.deepEqual(await s.calls(), before);
 });
 
 test('API bootstrap preserves its selection on reruns and never launches account login', async t => {
