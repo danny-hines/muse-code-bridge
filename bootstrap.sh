@@ -5,7 +5,7 @@ main() {
   umask 077
   local root="${MUSE_BRIDGE_ROOT:-$HOME/.local/share/muse-bridge}"
   local ref=main login=auto node_bin muse_bin codex_bin="" npm_bin work os arch archive expected actual
-  local wants_codex=false wants_other_host=false native=false opencode_version=auto auth='' key_file='' effective_auth skills='' list_skills=false
+  local wants_codex=false wants_other_host=false native=false replace_provider=false opencode_version=auto auth='' key_file='' effective_auth skills='' list_skills=false
   local -a host_args=()
   local -a auth_check_args=(--print-mode)
   local node_base=https://nodejs.org/dist/latest-v22.x
@@ -28,12 +28,14 @@ main() {
       --login) login=yes ;;
       --no-login) login=no ;;
       --native) native=true ;;
+      --replace-provider) replace_provider=true ;;
       --list-skills) list_skills=true ;;
       --help|-h)
         printf '%s\n' 'Usage: bootstrap.sh [--host codex|hermes|opencode] [--login | --no-login]' \
           'Repeat --host for several apps. Defaults to codex.' \
-          '--native: also install and select the experimental Muse model provider for Codex on macOS.' \
-          'Native mode changes the provider for new local tasks; it does not combine Astra and Muse in one menu.' \
+          '--native: prepare the experimental Muse service on macOS; preserve the current model/provider selection.' \
+          '--native --replace-provider: replace the active provider and model picker with Muse. Removes normal model options.' \
+          'Adding Muse alongside OpenAI models in one picker is not implemented. Desktop routing is not fully verified.' \
           'Fetch Muse Code Bridge; install missing Node.js and Muse Code locally.' \
           'Only the Codex integration installs the Codex CLI. Host desktop apps must already be installed.' \
           'Existing compatible tools are reused. No sudo or shell-profile edits.' \
@@ -58,6 +60,7 @@ main() {
     return 0
   fi
   if [[ "${#host_args[@]}" -eq 0 ]]; then host_args=(--host codex); wants_codex=true; fi
+  if [[ "$replace_provider" = true && "$native" != true ]]; then echo '--replace-provider requires --native.' >&2; return 2; fi
   if [[ "$native" = true && "$wants_other_host" = true ]]; then echo '--native supports Codex only. Install Hermes/OpenCode separately without --native.' >&2; return 2; fi
   case "$skills" in ''|all|core|none|implement|review|implement,review|review,implement) ;; *) echo 'Invalid --skills selection. Use all, core, none, implement, or review (comma-separated).' >&2; return 2 ;; esac
   if [[ "$wants_codex" = true && -n "$skills" && "$skills" != all ]]; then echo 'Codex bundles all skills; selective --skills applies to Hermes/OpenCode.' >&2; return 2; fi
@@ -190,15 +193,22 @@ main() {
   if [[ "$native" = true ]]; then
     "$node_bin" "$root/repo/dist/muse-native.mjs" install --root "$root/native"
     "$node_bin" "$root/repo/dist/muse-native.mjs" status --root "$root/native"
-    "$node_bin" "$root/repo/dist/muse-native.mjs" enable --root "$root/native"
+    if [[ "$replace_provider" = true ]]; then
+      "$node_bin" "$root/repo/dist/muse-native.mjs" enable --replace-provider --root "$root/native"
+    fi
   fi
   echo "Installed source commit: $sha"
   echo "Local source: $root/repo"
-  if [[ "$native" = true ]]; then
-    echo 'Setup finished. Fully quit Codex (Cmd+Q), reopen it, and start a new local task. Select a Muse model in the picker.'
+  if [[ "$replace_provider" = true ]]; then
+    echo 'Setup finished. Replaced the active provider and model catalog with Muse; normal model options are hidden.'
+    echo 'Fully quit Codex (Cmd+Q), reopen it, and start a new local task. Desktop request routing still needs verification.'
     echo 'Native mode is experimental: text and tool handoffs are supported; images and full browser compatibility are not.'
     echo 'To restore your previous model/provider, run this command, then fully quit and reopen Codex:'
     printf '%q %q disable --root %q\n' "$root/runtime/bin/node" "$root/repo/dist/muse-native.mjs" "$root/native"
+  elif [[ "$native" = true ]]; then
+    echo 'Setup finished. Prepared the native service; your active model/provider selection was preserved.'
+    echo 'This does not add Muse to the existing model picker. Use the installed Muse MCP plugin to keep your current models.'
+    echo 'Only --native --replace-provider activates the experimental replacement catalog and hides the normal model options.'
   else
     echo 'Setup finished. Restart the selected host and start a new local conversation. Ask Muse to review your project.'
   fi

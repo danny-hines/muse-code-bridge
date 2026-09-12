@@ -2,7 +2,7 @@
 
 Call Muse Code from **Codex / ChatGPT desktop, Hermes, or OpenCode**, using your Muse Code subscription or an explicit pay-as-you-go API key. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation.
 
-The default integration uses one shared MCP server connected to the official `muse serve` process. Each host gets its own installer and instructions. Muse is a collaborator: the host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse. An optional [experimental native provider for Codex](docs/native-provider.md) makes Muse the primary model through a separate provider configuration.
+The default integration uses one shared MCP server connected to the official `muse serve` process. Each host gets its own installer and instructions. Muse is a collaborator: the host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse. The [experimental native adapter](docs/native-provider.md) has passed Codex app-server protocol tests, but it does not add Muse alongside the existing desktop models. Global activation replaces the provider and catalog; desktop routing still needs an end-to-end check.
 
 Community integration, built against Muse Code **1.0.3 (1.0.3-R2198.1)** and Muse Session Protocol v1. This repository contains no credentials and no hosted relay.
 
@@ -16,20 +16,9 @@ Repository: [danny-hines/muse-code-bridge](https://github.com/danny-hines/muse-c
 
 **New here? Share the [quick setup guide](docs/setup.md)**. It includes a one-command install, copy-ready prompts for an agent, and instructions for switching back.
 
-Choose how you want Muse to participate:
+**Adding Muse to the existing Astra/OpenAI model picker is not implemented.** Use the MCP plugin to keep your existing model options while asking Muse to implement or review. The experimental native adapter can replace the active provider and catalog, which hides the normal model options; it is not an additive picker integration.
 
-| Goal | Setup |
-|---|---|
-| Keep Astra or your current model in charge; ask Muse to implement or review | Standard MCP plugin, below; macOS and Linux |
-| Select Muse as the main model for new local Codex tasks | Experimental native provider; automatic setup on macOS |
-
-For **Muse as the main Codex model** on a Mac, with your own Muse account:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --native --auth account --login
-```
-
-Complete the official Muse sign-in, fully quit Codex (Cmd+Q), reopen it, and start a new local task. Setup installs missing dependencies, the MCP plugin, and the local native service; it discovers models, checks service health, and saves the previous Codex selection before enabling Muse. **This selects a separate provider configuration; it does not add Muse alongside Astra with seamless switching.** Native mode supports text and tool handoffs; images are unsupported and full browser/desktop compatibility is unverified. See [native mode limits and recovery](docs/native-provider.md).
+The `--native` flag now only prepares and checks the native service. Global activation requires the separate `--replace-provider` option. See [native mode limits and recovery](docs/native-provider.md) before choosing replacement mode.
 
 For **Muse as a collaborator**, run on the computer where you use your host app. Codex is the default:
 
@@ -86,7 +75,7 @@ Add `--check` for a read-only preflight or `--login` for Muse login. macOS users
 
 The bootstrap keeps source at `~/.local/share/muse-bridge/repo` and managed dependencies under `runtime/`. This established path is retained across the project rename so existing session metadata stays available. Reruns refuse to overwrite modified source, unrelated directories, or conflicting host entries. Hermes/OpenCode config changes create private backups and preserve unrelated settings and comments.
 
-Rerun the same bootstrap command to update, or use `git pull --ff-only` and `./install.sh --host …` for a clone. Use `--no-login` once signed in and omit `--auth` to preserve the current credential choice. Include `--native` to refresh and enable the native service, between active requests. Native reruns preserve the installed model set, port, and original recovery copy. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
+Rerun the same bootstrap command to update, or use `git pull --ff-only` and `./install.sh --host …` for a clone. Use `--no-login` once signed in and omit `--auth` to preserve the current credential choice. Include `--native` to refresh the native service between active requests while preserving the current model/provider selection. Only an explicit `--replace-provider` also activates it. Native reruns preserve the installed model set, port, and original recovery copy. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
 
 After updating, wait for current work to finish and fully quit and reopen your host. Existing Codex conversations can retain the old bridge server despite newer files being installed. `muse_status` reports the actual running `bridge_version`, `bridge_build`, and `bridge_started_at` for troubleshooting; older releases omit these diagnostics.
 
@@ -168,7 +157,7 @@ install.sh                   Checkout installer and host preflight
 
 The build produces `dist/muse-server.mjs`, a bundled host configuration helper, and the same MCP server inside the Codex package. Host configuration uses absolute executable paths; no API service needs to stay running outside the host.
 
-**Codex native provider mode is experimental and opt-in.** See [installation, switching back, and limitations](docs/native-provider.md). It exposes a local Responses endpoint, discovers Muse models for Codex's catalog, and translates prompted JSON tool handoffs through the official CLI. A live Codex → Muse → Codex tool → Muse round trip has passed. It currently supports text, buffers responses, and selects one provider configuration; seamless Astra/Muse routing in one menu is not implemented. It needs a separate local service.
+**Codex native provider mode is experimental and opt-in.** See [installation, switching back, and limitations](docs/native-provider.md). It exposes a local Responses endpoint, discovers Muse models for Codex's catalog, and translates prompted JSON tool handoffs through the official CLI. A live Codex app-server → Muse → Codex tool → Muse round trip has passed with explicit provider selection; desktop picker routing remains unverified. It currently supports text, buffers responses, and selects one provider configuration; seamless Astra/Muse routing in one menu is not implemented. It needs a separate local service.
 
 Hermes [external-process provider plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin#external-process-acp-providers) and OpenCode [custom providers](https://opencode.ai/docs/providers/#custom-provider) remain separate, unimplemented native integrations. Their existing MCP integration is unchanged.
 

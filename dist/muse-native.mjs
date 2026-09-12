@@ -973,12 +973,14 @@ function disableConfig(text, restore) {
 var help = `Experimental Muse provider for Codex
 
 node dist/muse-native.mjs install [--model ID] [--port 47831]
-node dist/muse-native.mjs enable
+node dist/muse-native.mjs enable --replace-provider
 node dist/muse-native.mjs disable
 node dist/muse-native.mjs status
 
 Install prepares the catalog and starts a localhost service on macOS.
-Enable selects Muse for new Codex tasks; disable restores the previous selection.
+Enable REPLACES the active provider and hides the normal model options.
+Additive model selection is not implemented; desktop routing is not fully verified.
+Disable restores the previous selection.
 Restart the desktop app after enable/disable. Existing MCP skills remain installed.
 On other systems, run the printed server command in a terminal or service manager.
 `;
@@ -1019,12 +1021,13 @@ function installationSettings(previous, values, discovered, enabled) {
   return { port, models };
 }
 async function main(argv = process.argv.slice(2)) {
-  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { model: { type: "string" }, port: { type: "string" }, help: { type: "boolean" }, root: { type: "string" }, "codex-config": { type: "string" } } });
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { model: { type: "string" }, port: { type: "string" }, help: { type: "boolean" }, root: { type: "string" }, "codex-config": { type: "string" }, "replace-provider": { type: "boolean" } } });
   const action = positionals[0];
   if (values.help || !action) {
     console.log(help);
     return;
   }
+  if (action === "enable" && !values["replace-provider"]) throw new Error("Native activation REPLACES the active provider and hides the normal model options. Adding Muse alongside them is not implemented. Only use enable --replace-provider if you explicitly want replacement mode; desktop routing remains unverified. No settings changed.");
   const root = resolve(values.root || join3(process.env.MUSE_BRIDGE_ROOT || join3(homedir3(), ".local/share/muse-bridge"), "native"));
   const configPath = resolve(values["codex-config"] || join3(process.env.CODEX_HOME || join3(homedir3(), ".codex"), "config.toml"));
   const privateFile = join3(root, "provider.json"), catalogPath = join3(root, "models.json"), stateFile = join3(root, "codex-restore.json");
@@ -1083,7 +1086,8 @@ async function main(argv = process.argv.slice(2)) {
       console.log("Installed the experimental Muse provider and its macOS login service.");
     } else console.log(`Start the provider with: node ${JSON.stringify(join3(root, "server.mjs"))} --config ${JSON.stringify(privateFile)}`);
     console.log("Models: " + models.join(", "));
-    console.log("Run node dist/muse-native.mjs enable to select it in Codex.");
+    console.log("Current Codex model settings were preserved. Additive model selection is not implemented.");
+    console.log("Explicit replacement only: node dist/muse-native.mjs enable --replace-provider (hides normal model options).");
     return;
   }
   const config = await readJson(privateFile);

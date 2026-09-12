@@ -216,20 +216,34 @@ test('invalid host arguments stop before downloads or configuration changes', as
   assert.equal(await exists(s.root), false);
 });
 
-test('native bootstrap installs dependencies, logs in once, checks service, and enables last', async t => {
+test('native preparation installs dependencies and logs in without changing the active model provider', async t => {
   const s = await setup(t, { missing: true, platform: 'darwin' });
   const result = await s.run('--native', '--auth', 'account', '--login');
-  assert.match(result.stdout, /Fully quit Codex \(Cmd\+Q\)/);
-  assert.match(result.stdout, /Select a Muse model/);
-  assert.match(result.stdout, /disable --root/);
+  assert.match(result.stdout, /active model\/provider selection was preserved/);
+  assert.match(result.stdout, /does not add Muse to the existing model picker/);
   const calls = await s.calls();
   assert.equal(calls.filter(c => c.tool === 'curl').length, 5);
   assert.equal(calls.filter(c => c.tool === 'muse' && c.args[0] === 'login').length, 1);
   assert.ok(calls.findIndex(c => c.args[0] === 'login') < calls.findIndex(c => c.tool === 'native'));
-  assert.deepEqual(calls.filter(c => c.tool === 'native').map(c => c.args), ['install', 'status', 'enable'].map(action => [action, '--root', join(s.root, 'native')]));
+  assert.deepEqual(calls.filter(c => c.tool === 'native').map(c => c.args), ['install', 'status'].map(action => [action, '--root', join(s.root, 'native')]));
   assert.match(result.stdout, /Muse-managed account credentials/);
   // Account is the fresh-install default, so no connection file is necessary.
   assert.equal(await exists(s.env.MUSE_BRIDGE_CONNECTION_FILE), false);
+});
+
+test('native activation requires an explicit provider replacement choice', async t => {
+  const s = await setup(t, { platform: 'darwin' });
+  await assert.rejects(s.run('--replace-provider'), /requires --native/);
+  assert.deepEqual(await s.calls(), []);
+  assert.equal(await exists(s.root), false);
+  const result = await s.run('--native', '--replace-provider');
+  assert.match(result.stdout, /normal model options are hidden/);
+  assert.match(result.stdout, /disable --root/);
+  assert.deepEqual((await s.calls()).filter(c => c.tool === 'native').map(c => c.args), [
+    ['install', '--root', join(s.root, 'native')],
+    ['status', '--root', join(s.root, 'native')],
+    ['enable', '--replace-provider', '--root', join(s.root, 'native')],
+  ]);
 });
 
 test('native API setup skips login and stops before enabling when the health check fails', async t => {
@@ -237,7 +251,7 @@ test('native API setup skips login and stops before enabling when the health che
   const key = join(s.dir, 'key');
   await writeFile(key, 'fixture-key', { mode: 0o600 });
   s.env.BOOTSTRAP_TEST_NATIVE_FAIL = 'status';
-  await assert.rejects(s.run('--native', '--auth', 'api-key', '--api-key-file', key), e => {
+  await assert.rejects(s.run('--native', '--replace-provider', '--auth', 'api-key', '--api-key-file', key), e => {
     assert.match(e.stderr, /Fixture native failure/);
     assert.doesNotMatch(e.stdout, /Setup finished/);
     return true;

@@ -40,17 +40,17 @@ async function setup(t) {
   });
   return { root, original, config, configPath, privateFile, stateFile,
     ready: value => { ready = value; },
-    run: action => main([action, '--root', root, '--codex-config', configPath]),
+    run: (action, ...flags) => main([action, ...flags, '--root', root, '--codex-config', configPath]),
   };
 }
 
 test('enabling again preserves the original recovery copy and unrelated config edits', async t => {
   const s = await setup(t);
-  await s.run('enable');
+  await s.run('enable', '--replace-provider');
   const recovery = await readFile(s.stateFile, 'utf8');
   const edited = (await readFile(s.configPath, 'utf8')).replace('multi_agent = true', 'multi_agent = false');
   await writeFile(s.configPath, edited);
-  await s.run('enable');
+  await s.run('enable', '--replace-provider');
   assert.equal(await readFile(s.stateFile, 'utf8'), recovery);
   assert.equal(await readFile(s.configPath, 'utf8'), edited);
   await s.run('disable');
@@ -64,7 +64,7 @@ test('enabling again preserves the original recovery copy and unrelated config e
 test('a non-ready service never enables the provider or reports successful status', async t => {
   const s = await setup(t);
   s.ready(false);
-  await assert.rejects(s.run('enable'), /Start the local Muse provider/);
+  await assert.rejects(s.run('enable', '--replace-provider'), /Start the local Muse provider/);
   await assert.rejects(s.run('status'), /health check/);
   assert.equal(await readFile(s.configPath, 'utf8'), s.original);
   await assert.rejects(access(s.stateFile));
@@ -73,16 +73,26 @@ test('a non-ready service never enables the provider or reports successful statu
 
 test('rerun refuses mismatched service settings and manually changed managed blocks', async t => {
   const s = await setup(t);
-  await s.run('enable');
+  await s.run('enable', '--replace-provider');
   const recovery = await readFile(s.stateFile, 'utf8');
   const enabled = await readFile(s.configPath, 'utf8');
   await writeFile(s.privateFile, JSON.stringify({ ...s.config, models: ['muse-b'] }));
-  await assert.rejects(s.run('enable'), /service settings changed/);
+  await assert.rejects(s.run('enable', '--replace-provider'), /service settings changed/);
   assert.equal(await readFile(s.configPath, 'utf8'), enabled);
   await writeFile(s.privateFile, JSON.stringify(s.config));
   const edited = enabled.replace('model = "muse-a"', 'model = "manual-choice"');
   await writeFile(s.configPath, edited);
-  await assert.rejects(s.run('enable'), /Managed Muse settings changed/);
+  await assert.rejects(s.run('enable', '--replace-provider'), /Managed Muse settings changed/);
   assert.equal(await readFile(s.configPath, 'utf8'), edited);
   assert.equal(await readFile(s.stateFile, 'utf8'), recovery);
+});
+
+
+test('plain enable refuses replacement before contacting the service or writing recovery data', async t => {
+  const s = await setup(t);
+  s.ready(false);
+  await assert.rejects(s.run('enable'), /REPLACES the active provider/);
+  assert.equal(await readFile(s.configPath, 'utf8'), s.original);
+  await assert.rejects(access(s.stateFile));
+  await assert.rejects(access(`${s.configPath}.muse-native.lock`));
 });

@@ -9,7 +9,7 @@ import { MuseHost, findMuse } from '../src/msp.mjs';
 import { makeCatalog } from '../src/native-catalog.mjs';
 import { enableConfig, disableConfig } from '../src/native-config.mjs';
 
-const help = `Experimental Muse provider for Codex\n\nnode dist/muse-native.mjs install [--model ID] [--port 47831]\nnode dist/muse-native.mjs enable\nnode dist/muse-native.mjs disable\nnode dist/muse-native.mjs status\n\nInstall prepares the catalog and starts a localhost service on macOS.\nEnable selects Muse for new Codex tasks; disable restores the previous selection.\nRestart the desktop app after enable/disable. Existing MCP skills remain installed.\nOn other systems, run the printed server command in a terminal or service manager.\n`;
+const help = `Experimental Muse provider for Codex\n\nnode dist/muse-native.mjs install [--model ID] [--port 47831]\nnode dist/muse-native.mjs enable --replace-provider\nnode dist/muse-native.mjs disable\nnode dist/muse-native.mjs status\n\nInstall prepares the catalog and starts a localhost service on macOS.\nEnable REPLACES the active provider and hides the normal model options.\nAdditive model selection is not implemented; desktop routing is not fully verified.\nDisable restores the previous selection.\nRestart the desktop app after enable/disable. Existing MCP skills remain installed.\nOn other systems, run the printed server command in a terminal or service manager.\n`;
 const xml = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 async function exists(file) { try { return await lstat(file); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } }
 async function readJson(file) { try { return JSON.parse(await readFile(file, 'utf8')); } catch { throw new Error('Cannot read native provider settings or recovery data. No credentials were displayed.'); } }
@@ -31,9 +31,10 @@ export function installationSettings(previous, values, discovered, enabled) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { model: { type: 'string' }, port: { type: 'string' }, help: { type: 'boolean' }, root: { type: 'string' }, 'codex-config': { type: 'string' } } });
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { model: { type: 'string' }, port: { type: 'string' }, help: { type: 'boolean' }, root: { type: 'string' }, 'codex-config': { type: 'string' }, 'replace-provider': { type: 'boolean' } } });
   const action = positionals[0];
   if (values.help || !action) { console.log(help); return; }
+  if (action === 'enable' && !values['replace-provider']) throw new Error('Native activation REPLACES the active provider and hides the normal model options. Adding Muse alongside them is not implemented. Only use enable --replace-provider if you explicitly want replacement mode; desktop routing remains unverified. No settings changed.');
   const root = resolve(values.root || join(process.env.MUSE_BRIDGE_ROOT || join(homedir(), '.local/share/muse-bridge'), 'native'));
   const configPath = resolve(values['codex-config'] || join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'config.toml'));
   const privateFile = join(root, 'provider.json'), catalogPath = join(root, 'models.json'), stateFile = join(root, 'codex-restore.json');
@@ -79,7 +80,8 @@ export async function main(argv = process.argv.slice(2)) {
       console.log('Installed the experimental Muse provider and its macOS login service.');
     } else console.log(`Start the provider with: node ${JSON.stringify(join(root, 'server.mjs'))} --config ${JSON.stringify(privateFile)}`);
     console.log('Models: ' + models.join(', '));
-    console.log('Run node dist/muse-native.mjs enable to select it in Codex.');
+    console.log('Current Codex model settings were preserved. Additive model selection is not implemented.');
+    console.log('Explicit replacement only: node dist/muse-native.mjs enable --replace-provider (hides normal model options).');
     return;
   }
   const config = await readJson(privateFile);

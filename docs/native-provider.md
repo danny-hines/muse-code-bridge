@@ -1,8 +1,10 @@
 # Experimental Muse model provider for Codex
 
-Select Muse as the model for a new local Codex desktop task. This is separate from the default MCP plugin, where an OpenAI model coordinates with a Muse agent.
+**This is a provider-replacement prototype, not an additive desktop model picker.** Activation hides the normal Astra/OpenAI model options. To keep those options and use Muse from the desktop, install the [MCP plugin](setup.md).
 
-## What works
+The adapter has passed Codex app-server protocol tests. Those tests explicitly select the Muse provider; they do not establish end-to-end desktop picker routing. Seeing Muse in the menu proves catalog loading, not correct request routing.
+
+## Verified at the app-server level
 
 - Model discovery through Codex's custom catalog and `model/list`.
 - Responses-compatible text replies, function tools, namespaced tools, and freeform tools such as patch inputs.
@@ -14,33 +16,46 @@ This adapter uses a **prompted JSON handoff**, not a raw Meta inference endpoint
 
 Only a completed Muse terminal result is accepted. Invalid JSON, unknown tools, incomplete runs, and unsupported inputs fail explicitly. The server does not execute requested Codex tools itself, retry model requests automatically, or forward an OpenAI request to Meta.
 
-## Install and enable
+## Prepare without changing model selection
 
-On macOS, the complete setup is one command. Install the Codex desktop app first, then run:
+On macOS, prepare the service with your own Muse account:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --native --auth account --login
 ```
 
-Complete the official Muse browser sign-in, then fully quit and reopen Codex and start a new local task. No Git, Homebrew, API key, or build step is required. The script installs missing dependencies and the MCP plugin, prepares the native service, checks health, and enables it. See the [quick setup guide](setup.md) for an agent prompt and API setup. Account mode uses Muse's saved credentials; confirm your subscription is the active credential in Muse.
+Complete the official Muse browser sign-in. The script installs missing dependencies and the MCP plugin, prepares the native service, and checks its health. **It preserves the current Codex model/provider selection. It does not add models to the picker.** Existing replacement-mode users remain in replacement mode until they run `disable`.
 
-For manual setup, first install the regular bridge using the root README's bootstrap, or use your existing checkout. From that checkout:
+For an existing checkout, the equivalent preparation is:
 
 ```sh
 node dist/muse-native.mjs install
 node dist/muse-native.mjs status
-node dist/muse-native.mjs enable
 ```
 
 For a bootstrap installation, the checkout is `~/.local/share/muse-bridge/repo`. If Node was installed by bootstrap, use `~/.local/share/muse-bridge/runtime/bin/node` in place of `node`. No extra npm install or build is required for the committed bundles.
 
-`install` discovers the available models through the official CLI. On a fresh installation it includes the catalog with Muse's marked default first (otherwise the first discovered model). On reruns it preserves the installed model set and port, even if Muse's catalog order changes. Use `--model EXACT_ID` to select one discovered model or `--port NUMBER` to change the localhost port (initially 47831); disable first when changing either. If a previously selected model is no longer available, setup stops and asks you to choose another. Neither model discovery nor the install command verifies subscription billing. Authentication is selected through the regular bridge installer, as documented in the root README.
+`install` discovers models through the official CLI. Fresh installs include the discovered catalog with Muse's marked default first. Reruns preserve the installed model set and port. Use `--model EXACT_ID` to select one model or `--port NUMBER` to change the port (initially 47831); disable first when changing either. Setup stops if a previously selected model is unavailable. Discovery and health checks do not verify subscription billing.
 
-On macOS, installation creates a private provider configuration and a LaunchAgent named `com.muse-code-bridge.native`. It starts at login and listens only on `127.0.0.1`. A generated local bearer token protects the endpoint; it is not an OpenAI or Meta API key. On Linux, installation prints the command to run in a terminal or your service manager before enabling Codex.
+On macOS, preparation creates a private provider configuration and a LaunchAgent named `com.muse-code-bridge.native`. It starts at login and listens only on `127.0.0.1`, protected by a generated local bearer token. On Linux, manual `install` prints the command to run under your service manager. See the [setup guide](setup.md) for authentication options.
 
-`enable` backs up the affected Codex settings, selects the `muse_bridge` provider and Muse catalog, sets Muse's initial effort to High, and disables provider-hosted web search. **Fully quit the desktop app and reopen it, then start a new local task.** The picker should show the discovered Muse models with an experimental label. The desktop picker uses the same catalog path verified by the app-server acceptance test; its visual display still needs checking after restart.
+## Explicit provider replacement
 
-Try: “Use the terminal to create a small text file in this project, read it back, and report what you verified.” Codex should display actual tool calls before Muse reports success. `muse-implement` is unnecessary when Muse is already the primary model.
+Use this only for an experiment where **replacing the normal model options with Muse is the intended outcome**:
+
+```sh
+node dist/muse-native.mjs enable --replace-provider
+```
+
+The bootstrap equivalent is `--native --replace-provider`. Both require the explicit replacement option; plain `enable` refuses before any settings change.
+
+Activation backs up the affected settings, selects `muse_bridge` and the Muse-only catalog, sets initial effort to High, and disables provider-hosted web search. Fully quit and reopen Codex after enabling or disabling; start a new local task. Previously created tasks may retain their provider. A cached model list during a provider change can also pair a Muse model name with `openai`, producing the “not supported when using Codex with a ChatGPT account” error. That error alone does not establish that a request reached or failed inside Muse.
+
+Desktop acceptance still requires verifying the new task's provider and an actual tool round trip through the GUI. The existing `verify-native.mjs` test checks the app-server protocol with explicit provider selection, not this GUI path.
+
+## Why this does not add models alongside Astra
+
+The current adapter changes `model_provider` and `model_catalog_json`. Appending names to a catalog does not assign a different provider to each name. A combined picker needs a verified integration that routes every selection to its corresponding provider while preserving account authentication. This repository has not implemented that integration. See Codex's [provider configuration](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers) and [app-server interface](https://learn.chatgpt.com/docs/app-server).
 
 ## Switching back and updates
 
@@ -64,7 +79,7 @@ To update a bootstrap installation on macOS, run the following **between request
 curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --native --no-login
 ```
 
-This preserves the authentication choice, port, installed models, and original Codex recovery copy. Repeated `enable` validates the existing setup without replacing that copy. For a clone, update the repository and rerun `install`, `status`, and `enable`. Disable first if changing its model set or port. To remove the macOS login service after disabling:
+This preserves the authentication choice, port, installed models, and original Codex recovery copy. Updates do not enable or disable replacement mode. Repeated `enable --replace-provider` validates an already enabled setup without replacing the recovery copy. For a clone, update the repository and rerun `install` and `status`. Disable first if changing its model set or port. To remove the macOS login service after disabling:
 
 ```sh
 launchctl bootout "gui/$(id -u)/com.muse-code-bridge.native"
