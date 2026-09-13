@@ -34,7 +34,7 @@ export async function main(argv = process.argv.slice(2)) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { model: { type: 'string' }, port: { type: 'string' }, help: { type: 'boolean' }, root: { type: 'string' }, 'codex-config': { type: 'string' }, 'replace-provider': { type: 'boolean' } } });
   const action = positionals[0];
   if (values.help || !action) { console.log(help); return; }
-  if (action === 'enable') throw new Error('Global native activation has been withdrawn because it replaces the existing model options. Additive provider routing is not implemented. Use the MCP plugin; disable remains available for recovery. No settings changed.');
+  if (action === 'enable') throw new Error('Global native activation has been withdrawn because it replaces the existing model options. Use the separate experimental macOS launcher for both catalogs; see docs/setup.md. Disable remains available for recovery. No settings changed.');
   const root = resolve(values.root || join(process.env.MUSE_BRIDGE_ROOT || join(homedir(), '.local/share/muse-bridge'), 'native'));
   const configPath = resolve(values['codex-config'] || join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'config.toml'));
   const privateFile = join(root, 'provider.json'), catalogPath = join(root, 'models.json'), stateFile = join(root, 'codex-restore.json');
@@ -80,7 +80,7 @@ export async function main(argv = process.argv.slice(2)) {
       console.log('Installed the experimental Muse provider and its macOS login service.');
     } else console.log(`Start the provider with: node ${JSON.stringify(join(root, 'server.mjs'))} --config ${JSON.stringify(privateFile)}`);
     console.log('Models: ' + models.join(', '));
-    console.log('Current Codex model settings were preserved. Additive model selection is not implemented.');
+    console.log('Current Codex model settings were preserved. For the combined model picker, use the separate experimental macOS launcher in docs/setup.md.');
     console.log('This standalone protocol prototype cannot be activated as a desktop model-picker integration.');
     return;
   }

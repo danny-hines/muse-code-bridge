@@ -14,7 +14,8 @@ MUSE_ADDITIVE_CODEX_BIN=/absolute/path/to/real/codex node dist/muse-additive.mjs
 Supports local stdio only. Other CLI commands pass through to the real Codex.
 OpenAI settings remain owned by Codex; Muse uses the bridge's existing auth mode.
 MUSE_ADDITIVE_STATE_DIR optionally selects a private routing-state directory.
-Desktop discovery/refresh and GUI compatibility are not verified. See docs/additive-models.md.
+Model selection has been tested in the macOS desktop. Automatic picker refresh
+and broader GUI compatibility remain under test. See docs/additive-models.md.
 `;
 try {
   const args = process.argv.slice(2);
@@ -30,7 +31,7 @@ try {
       for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => child.kill(signal));
     } else {
       const runtime = await createAdditiveRuntime({ executable, args,
-        stateRoot: process.env.MUSE_ADDITIVE_STATE_DIR || join(homedir(), '.local/share/muse-bridge/additive'),
+        stateRoot: process.env.MUSE_ADDITIVE_STATE_DIR || join(process.env.MUSE_BRIDGE_ROOT || join(homedir(), '.local/share/muse-bridge'), 'additive'),
         emit: message => process.stdout.write(JSON.stringify(message) + '\n'),
       });
       let buffer = '', stopping = false;

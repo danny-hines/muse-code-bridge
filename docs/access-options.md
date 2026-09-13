@@ -11,7 +11,7 @@ Checked **September 8, 2026**. Availability, models, and prices can change.
 | Bridge: explicit API key | Muse Code, called by the host | Your additional Meta API key, billed per token | Yes |
 | Native model API provider | The host's own agent | Its configured API provider and key | No; separate provider configuration |
 
-For **Codex plus your Muse Code subscription**, the MCP bridge lets Codex collect browser evidence, ask Muse for another approach, then test the result and continue the same Muse conversation. The host keeps its selected model. The separate [experimental native provider](native-provider.md) selects Muse as the primary model, with text/tool handoffs and significant current compatibility limits.
+For **Codex plus your Muse Code subscription**, the MCP bridge lets Codex collect browser evidence, ask Muse for another approach, then test the result and continue the same Muse conversation. The host keeps its selected model. The separate [experimental combined picker on macOS](setup.md#select-muse-directly-in-codex--chatgpt-desktop-macos-experimental) lets you select Muse as the primary model alongside OpenAI options, with text/tool handoffs and current compatibility limits.
 
 For **Muse Spark as OpenCode's main model**, try the existing Zen route first. The bridge adds the Muse Code agent alongside OpenCode, with Muse's own sessions, tools, and approvals. These are different agent setups; a shared model family does not imply identical behavior. Native adapters for OpenCode and Hermes are not implemented. See [OpenCode custom providers](https://opencode.ai/docs/providers/#custom-provider) and [Hermes provider configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration/) for their separate interfaces.
 
@@ -38,7 +38,7 @@ The bridge's API mode uses your additional Meta API key with the official CLI. I
 
 Meta ties Muse Code subscriptions to the credential connected automatically during CLI onboarding. It is for Muse Code only; separately created Model API keys use pay-as-you-go. Subscription use runs through the CLI while signed in to the associated account. When usage limits are reached, Meta documents waiting for reset or upgrading. [Muse Code subscriptions](https://dev.meta.ai/docs/muse-code/subscriptions).
 
-That is why this project uses the official `muse serve` session protocol. It does not turn subscription credentials into general-purpose API credentials. Account mode removes an inherited `META_API_KEY`, but preserves Muse's stored credentials; Muse decides the actual entitlement. The documented credential precedence is environment key, stored key, then stored browser session. [Muse authentication](https://dev.meta.ai/docs/muse-code/auth).
+That is why this project uses the official CLI: `muse serve` for MCP conversations and `muse exec` for the experimental picker adapter. It does not turn subscription credentials into general-purpose API credentials. Account mode removes an inherited `META_API_KEY`, but preserves Muse's stored credentials; Muse decides the actual entitlement. The documented credential precedence is environment key, stored key, then stored browser session. [Muse authentication](https://dev.meta.ai/docs/muse-code/auth).
 
 Use `muse_status` to check the bridge's selected authentication mode and discover models. It does not prove which plan was charged. Confirm that in Muse's own account and usage interface. Each person installs their own CLI and authenticates their own account; sharing this repository shares no subscription or credentials.
 
@@ -46,4 +46,4 @@ Use `muse_status` to check the bridge's selected authentication mode and discove
 
 One repository keeps the Muse session implementation shared and the host installers separate. Codex gets the `muse-codex-bridge` plugin and a collaboration skill; Hermes and OpenCode get MCP configuration. Both account and API modes keep this same workflow. Setup instructions are in the [README](../README.md#login-and-subscription).
 
-This release focuses on calling **Muse Code from an existing host conversation**. It provides no standalone chat UI, native model-provider adapter, or direct forwarding of the host's browser/tools to Muse. The host can share the evidence its tools collect. No comparative quality benchmark between the agents has been performed.
+The standard installation calls **Muse Code from an existing host conversation** through MCP. The experimental macOS launcher adds a primary-model adapter and Codex tool handoffs; its broader desktop-tool compatibility is still under test. There is no standalone chat UI or native Hermes/OpenCode adapter. No comparative quality benchmark between the agents has been performed.

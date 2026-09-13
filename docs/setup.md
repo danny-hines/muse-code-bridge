@@ -4,7 +4,14 @@ Share this page: **https://github.com/danny-hines/muse-code-bridge/blob/main/doc
 
 The installer is the supported setup path. Run it yourself or ask your desktop agent to run the same script. Each person signs in to their own Muse account; the repository contains no account credentials and needs no hosted relay.
 
-**The working desktop integration is Muse as a collaborator through MCP tools and skills. Adding Muse alongside Astra/OpenAI models in the existing model picker is not implemented.** Global provider replacement has been withdrawn. The intended native feature is one picker containing both providers, with automatic catalog updates; see the [requirements and implementation status](additive-models.md).
+Choose the experience you want:
+
+| Experience | Hosts | Setup |
+|---|---|---|
+| Keep Astra or another host model in charge; delegate to Muse through skills/tools | Codex / ChatGPT desktop, Hermes, OpenCode | Run bootstrap, then restart the host normally |
+| Select Muse directly alongside the OpenAI models | Codex / ChatGPT desktop on macOS, experimental | Run bootstrap, then launch the app with the script below |
+
+Both model groups and Muse selection have now been user-tested in the macOS desktop. Automatic GUI refresh when providers publish new models and broader desktop feature compatibility remain under test. Existing OpenAI provider settings are preserved in both workflows. [Status and limits](additive-models.md).
 
 ## Keep your model options and use Muse as a collaborator
 
@@ -40,6 +47,51 @@ The agent runs the same installer and can help with errors. It does not need an 
 
 For Hermes or OpenCode, add `--host hermes` or `--host opencode`. Their supported integration is MCP tools and skills; their native model-provider integrations are not implemented. See the [host guides](../README.md#install) and [skill catalog](skills.md).
 
+## Select Muse directly in Codex / ChatGPT desktop (macOS, experimental)
+
+Run the bootstrap above first. It includes the compiled adapter and launcher, so no Git clone, npm build, or separate service installation is needed. If you already installed the bridge, use the update command below to fetch the current launcher.
+
+After setup and Muse login, **fully quit Codex / ChatGPT desktop with Cmd+Q**. Then run:
+
+```sh
+"$HOME/.local/share/muse-bridge/repo/scripts/launch-additive-macos.sh"
+```
+
+Keep that terminal open while using the app. Start a new local chat and select a Muse model from the normal model picker. Your OpenAI models remain available there too. No skill invocation is required: the selected Muse model handles the chat and can request Codex tool calls. To change providers in an existing chat, finish or interrupt the current turn before selecting another model.
+
+**Use this launcher each time you want both catalogs.** Opening the app normally uses the standard Codex runtime. The separate launcher does not change your Dock shortcut or install a background login service. Its model and reasoning preferences survive launcher restarts in a private bridge file; existing chats keep their own provider choices.
+
+The launcher finds bootstrap's private Node and Muse executables automatically. The desktop app itself must already be installed at `/Applications/ChatGPT.app`; set `MUSE_ADDITIVE_APP_PATH` if it is elsewhere. For a Git clone, use `./scripts/launch-additive-macos.sh` from that checkout. For a custom bootstrap root, use that root's `repo/scripts/launch-additive-macos.sh`; it detects the managed root automatically.
+
+Optional local prerequisite check, which can run while the app is open:
+
+```sh
+"$HOME/.local/share/muse-bridge/repo/scripts/launch-additive-macos.sh" --check
+```
+
+This checks the local app and executables. It does not make a model request or establish account/subscription access. Muse currently supports text and tool handoffs through the adapter; image/audio/file inputs and full browser/connector compatibility are not established. See [current limits](additive-development.md#limits-before-a-native-release).
+
+### Ask an agent to set up the combined picker
+
+```text
+Set up the experimental combined OpenAI/Muse model picker for my macOS
+Codex / ChatGPT desktop app. Follow
+https://github.com/danny-hines/muse-code-bridge/blob/main/docs/setup.md
+Use the standard account-mode bootstrap with --auth account --login, then
+run the launcher's --check. Let me complete Muse's official sign-in.
+Preserve my existing OpenAI provider and catalog. Give me the exact launcher
+command and tell me when to quit the app before running it. If this task runs
+inside that app, do not terminate it while the task is still running.
+```
+
+The retired `--native`, `--replace-provider`, and direct `enable` commands remain disabled. They belong to the old provider-replacement experiment and are not steps in this setup.
+
+### Return to the standard app or remove the bridge
+
+Fully quit the app, then reopen it normally to return to the standard runtime. To resume a Muse-primary chat, reopen through the launcher. Keep `additive/routes.json` while retaining those chats; deleting routing metadata prevents implicit Muse resume. The ordinary app cannot resume the custom Muse provider by itself.
+
+Removing the MCP plugin is a separate step, covered in the [Codex guide](../integrations/codex/README.md#update-and-remove). You can retain the private preferences and routes for future use. Source/runtime files are shared with any Hermes or OpenCode installations, so remove them only after those integrations are removed too.
+
 ## Restore missing Astra/OpenAI model options
 
 If you previously enabled native replacement mode, run this and then **fully quit and reopen Codex**:
@@ -51,12 +103,6 @@ If you previously enabled native replacement mode, run this and then **fully qui
 For a clone, use `node dist/muse-native.mjs disable` from that checkout. This restores the saved provider, catalog, model, effort, and search settings. The MCP plugin and skills remain installed. If you manually edited the managed provider settings, the helper stops rather than overwriting them; see [recovery details](native-provider.md#switching-back-and-updates).
 
 Installing or updating the collaborator plugin does not automatically disable previously enabled replacement mode. Use the restore command first when returning to your previous provider. Start a new task after restarting so the provider and model selection agree.
-
-## Native model selection is not available yet
-
-The old `--native`, `--replace-provider`, and direct `enable` commands refuse before making changes. They cannot add Muse to the existing picker. Recovery with `disable` remains available for earlier installations.
-
-The retained [protocol prototype](native-provider.md) supports text and tool handoffs in isolated app-server tests. It does not establish desktop picker routing or automatic model discovery. A native installation will need to meet the [additive model requirements](additive-models.md) before it is offered again.
 
 ## Subscription or API
 
@@ -73,6 +119,16 @@ This assumes the key file already exists. API mode skips account login; only the
 
 ## Updates
 
-Wait until active work finishes, then rerun the bootstrap. Omit `--auth` and use `--no-login` to keep your saved credential choice without signing in again. Restart the desktop app afterward. The installer refuses to replace locally modified source or conflicting managed settings.
+Wait until active work finishes. For the default Codex bootstrap installation, update with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --host codex --no-login
+```
+
+Omitting `--auth` preserves the saved account/API choice; `--no-login` avoids signing in again. Repeat your original host flags when updating multiple hosts. Keep any custom `MUSE_BRIDGE_ROOT` override on the `bash` process. Bootstrap uses a managed source snapshot, so rerun bootstrap rather than running `git pull` inside that directory. For a Git clone, use `git pull --ff-only` and rerun `./install.sh --host codex` (or your selected hosts); release bundles are committed, so an unmodified clone needs no build.
+
+Then fully quit and reopen the desktop app. **For the combined picker, reopen with the launcher command above.** A running adapter retains its loaded code; restarting only the chat does not update it. The installer preserves private connection/preferences/routes outside the managed source and refuses to replace locally modified source or conflicting host settings.
+
+If an older build shows **“Couldn't update model settings”**, update and fully relaunch through the script. If only OpenAI models appear after a normal app launch, use the script to enable the combined picker for that session. If setup reports a lock, confirm the corresponding installer/runtime has exited before removing a stale lock; see [launcher troubleshooting](additive-development.md#temporary-desktop-test-on-macos).
 
 This is an independent community project, not an official Meta or OpenAI desktop integration.

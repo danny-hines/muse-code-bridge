@@ -1,6 +1,6 @@
 # Additive routing prototype
 
-This is a development build, not the standard installer. The supported public setup remains [MCP tools and skills](setup.md). The prototype adds a local routing layer around Codex's app-server protocol; it does not change the saved OpenAI provider or replace the installed desktop application.
+This is an experimental launch option, included in the repository and bootstrap source but activated separately. The standard installer configures [MCP tools and skills](setup.md). The launcher adds a local routing layer around Codex's app-server protocol; it does not change the saved OpenAI provider or replace the installed desktop application. New users should follow the [quick setup guide](setup.md).
 
 ## What is implemented
 
@@ -43,9 +43,9 @@ It replays the desktop's model-and-effort preference save, creates an ephemeral 
 
 ## Temporary desktop test on macOS
 
-**Both model groups have been confirmed visible in the desktop picker. GUI selection and automatic picker refresh still need acceptance testing.** The first GUI test exposed a rejected model-settings save. The adapter now handles both picker save paths (new-chat defaults and existing-chat settings); these pass against the real app-server with local model fixtures. A successful GUI generation after this fix remains to be verified.
+**Both model groups and Muse selection have been user-tested successfully in the macOS desktop after the picker-save fix.** Both save paths (new-chat defaults and existing-chat settings) also pass against the real app-server with local model fixtures, and live Muse text/tool generation has passed separately. Automatic GUI refresh and broader desktop feature compatibility remain unverified.
 
-After building the repository, fully quit the desktop app and run this from the checkout:
+Bootstrap installations and unmodified Git clones include compiled bundles. After installing the prerequisites, fully quit the desktop app and run this from the checkout (build with `npm run build` only after source edits):
 
 ```sh
 ./scripts/launch-additive-macos.sh
@@ -57,7 +57,7 @@ Use a new, disposable local task for the GUI test. Confirm that all normal OpenA
 
 After updating the checkout or rebuilding the adapter, fully quit and relaunch with the same command. An already-running adapter keeps its loaded code. In particular, a launch from before the picker-save fix rejects Muse defaults with **“Couldn't update model settings.”** Restarting only the chat does not load the fix.
 
-The app is expected at `/Applications/ChatGPT.app`. Set `MUSE_ADDITIVE_APP_PATH` for another location and `MUSE_BRIDGE_NODE_BIN` if Node is installed privately. Routing state defaults to `~/.local/share/muse-bridge/additive`; `MUSE_ADDITIVE_STATE_DIR` can select another private directory. Do not run more than one adapter against the same tasks. After a forced process kill, a stale `runtime.lock` may need removal, but only after confirming that no additive runtime remains active.
+The app is expected at `/Applications/ChatGPT.app`. Set `MUSE_ADDITIVE_APP_PATH` for another location. The launcher discovers bootstrap's private Node/Muse tools, including in custom managed roots; `MUSE_BRIDGE_NODE_BIN` and `MUSE_BRIDGE_EXECUTABLE` override them explicitly. `--check` validates local prerequisites without launching the app or checking account access. Routing state defaults to `~/.local/share/muse-bridge/additive`, or `additive/` under `MUSE_BRIDGE_ROOT`; `MUSE_ADDITIVE_STATE_DIR` can select another private directory. Do not run more than one adapter against the same tasks. After a forced process kill, a stale `runtime.lock` may need removal, but only after confirming that no additive runtime remains active.
 
 The standard runtime cannot resume a Muse-primary task using this custom provider on its own. Reopen the development runtime to continue such a task. Ordinary OpenAI tasks and the existing Muse MCP skills retain their normal setup.
 

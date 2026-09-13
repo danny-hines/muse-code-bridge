@@ -1,6 +1,6 @@
 # Muse protocol prototype and legacy recovery
 
-**Global provider activation has been withdrawn.** It replaced the normal Astra/OpenAI model options and did not meet the goal of adding Muse alongside them. The supported desktop integration is the [MCP plugin](setup.md). An [additive picker with automatic model discovery](additive-models.md) is not implemented yet.
+**Global provider activation has been withdrawn.** It replaced the normal Astra/OpenAI model options and did not meet the goal of adding Muse alongside them. For current setup, choose the [MCP plugin or experimental combined picker](setup.md). The combined macOS picker has been user-tested; automatic GUI catalog refresh remains under test. This page covers the older standalone protocol service and recovery from its provider-replacement configuration.
 
 The adapter has passed Codex app-server protocol tests. Those tests explicitly select the Muse provider; they do not establish end-to-end desktop picker routing. Seeing Muse in the menu proves catalog loading, not correct request routing.
 

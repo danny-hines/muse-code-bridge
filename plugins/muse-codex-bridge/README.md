@@ -20,7 +20,13 @@ Use `muse-review` for a second opinion where the host retains implementation. Bo
 
 **The MCP plugin does not add Muse Spark to the model picker.** Your selected Codex model coordinates with Muse through tools. Muse has its own conversation and tools; it does not automatically inherit the desktop browser, other plugins, or the full host conversation. The host can share relevant evidence with Muse.
 
-For Muse as the primary model, use the separate [experimental native provider](https://github.com/danny-hines/muse-code-bridge/blob/main/docs/native-provider.md). It installs a local service and custom model catalog, with an explicit enable/disable command. It currently supports text and tool handoffs; it does not combine OpenAI and Muse providers in one automatically routed menu.
+For Muse as the primary model, use the separate [experimental combined picker on macOS](https://github.com/danny-hines/muse-code-bridge/blob/main/docs/setup.md#select-muse-directly-in-codex--chatgpt-desktop-macos-experimental). It has been user-tested with both OpenAI and Muse model options. After bootstrap, fully quit the app and run:
+
+```sh
+"$HOME/.local/share/muse-bridge/repo/scripts/launch-additive-macos.sh"
+```
+
+For a clone, run `./scripts/launch-additive-macos.sh` from the checkout. Use the launcher each time you want the combined picker and keep its terminal open. The MCP plugin and skills remain available. No separate service or provider-replacement command is needed. The adapter supports text and tool handoffs; automatic GUI catalog refresh and full desktop feature compatibility still need validation.
 
 ## Update and remove
 
@@ -43,3 +49,5 @@ codex plugin marketplace remove muse-bridge
 ```
 
 Removing plugin registrations does not remove your Muse login or sessions. Bootstrap retains the established `~/.local/share/muse-bridge` directory for compatibility. Don't remove shared runtime/source files while another host still uses them.
+
+To stop using the combined picker, fully quit the app and reopen it normally. Its private `additive/preferences.json` and `additive/routes.json` remain available for future launcher sessions. Retain routing state if you want to resume Muse-primary tasks. Reopening a Muse-primary task requires the additive launcher; normal OpenAI tasks keep their usual setup. Removing the MCP plugin alone does not affect the separate launcher.

@@ -116,4 +116,8 @@ echo 'Muse Code Bridge installed. When current work finishes, fully quit Codex (
 echo 'Start a NEW local conversation. Existing conversations may retain the previous bridge server until you quit the app.'
 echo 'Enable the Muse Code Bridge plugin (not the model picker) and ask: Ask Muse to review my changes.'
 echo 'For account mode, sign in with muse login if needed. API mode uses your configured private key file.'
-echo 'Keep this checkout; run git pull --ff-only and ./install.sh to update.'
+if [ -f "$repo_dir/.muse-bridge-source.json" ]; then
+  echo 'Rerun bootstrap.sh to update this managed installation; it is a source snapshot, not a Git clone.'
+else
+  echo 'Keep this checkout; run git pull --ff-only and ./install.sh to update.'
+fi

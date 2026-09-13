@@ -28,13 +28,13 @@ main() {
       --login) login=yes ;;
       --no-login) login=no ;;
       --native|--replace-provider)
-        echo 'Native desktop activation has been withdrawn: it replaced the existing model picker. Additive provider routing is not implemented yet. Run the standard MCP setup to keep your model options. No settings changed.' >&2
+        echo 'Global provider activation has been withdrawn: it hid the existing models. Use the standard bootstrap, then the separate experimental macOS launcher for both catalogs. See docs/setup.md. No settings changed.' >&2
         return 2 ;;
       --list-skills) list_skills=true ;;
       --help|-h)
         printf '%s\n' 'Usage: bootstrap.sh [--host codex|hermes|opencode] [--login | --no-login]' \
           'Repeat --host for several apps. Defaults to codex.' \
-          'Muse works through MCP tools and skills. Adding Muse to the existing model picker is not implemented.' \
+          'Installs Muse MCP tools and skills. The experimental combined model picker uses a separate macOS launcher; see docs/setup.md.' \
           'Fetch Muse Code Bridge; install missing Node.js and Muse Code locally.' \
           'Only the Codex integration installs the Codex CLI. Host desktop apps must already be installed.' \
           'Existing compatible tools are reused. No sudo or shell-profile edits.' \
@@ -189,6 +189,10 @@ main() {
   echo "Installed source commit: $sha"
   echo "Local source: $root/repo"
   echo 'Setup finished. Restart the selected host and start a new local conversation. Ask Muse to review your project.'
+  if [[ "$wants_codex" = true && "$os" = darwin ]]; then
+    echo 'For the experimental combined OpenAI/Muse picker, fully quit the desktop app and run:'
+    printf '  %q\n' "$root/repo/scripts/launch-additive-macos.sh"
+  fi
 }
 
 main "$@"

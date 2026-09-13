@@ -969,7 +969,7 @@ async function main(argv = process.argv.slice(2)) {
     console.log(help);
     return;
   }
-  if (action === "enable") throw new Error("Global native activation has been withdrawn because it replaces the existing model options. Additive provider routing is not implemented. Use the MCP plugin; disable remains available for recovery. No settings changed.");
+  if (action === "enable") throw new Error("Global native activation has been withdrawn because it replaces the existing model options. Use the separate experimental macOS launcher for both catalogs; see docs/setup.md. Disable remains available for recovery. No settings changed.");
   const root = resolve(values.root || join3(process.env.MUSE_BRIDGE_ROOT || join3(homedir3(), ".local/share/muse-bridge"), "native"));
   const configPath = resolve(values["codex-config"] || join3(process.env.CODEX_HOME || join3(homedir3(), ".codex"), "config.toml"));
   const privateFile = join3(root, "provider.json"), catalogPath = join3(root, "models.json"), stateFile = join3(root, "codex-restore.json");
@@ -1028,7 +1028,7 @@ async function main(argv = process.argv.slice(2)) {
       console.log("Installed the experimental Muse provider and its macOS login service.");
     } else console.log(`Start the provider with: node ${JSON.stringify(join3(root, "server.mjs"))} --config ${JSON.stringify(privateFile)}`);
     console.log("Models: " + models.join(", "));
-    console.log("Current Codex model settings were preserved. Additive model selection is not implemented.");
+    console.log("Current Codex model settings were preserved. For the combined model picker, use the separate experimental macOS launcher in docs/setup.md.");
     console.log("This standalone protocol prototype cannot be activated as a desktop model-picker integration.");
     return;
   }

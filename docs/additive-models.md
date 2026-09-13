@@ -1,6 +1,6 @@
 # Additive model selection: requirements and status
 
-**Status: both model groups are visible in the desktop picker; GUI selection and automatic refresh are still under development.** The supported desktop integration remains Muse through [MCP tools and skills](setup.md). The previous global provider activation has been withdrawn. See [development setup and tests](additive-development.md) for the new adapter, which preserves the original provider configuration.
+**Status: both model groups and Muse selection have been user-tested successfully in the macOS desktop. Automatic GUI refresh and broader compatibility remain under test.** The standard installer configures [MCP tools and skills](setup.md); the combined picker uses a separate experimental launcher included with bootstrap. The previous global provider activation remains disabled. See [setup](setup.md) or [development and tests](additive-development.md).
 
 ## Required behavior
 
@@ -23,7 +23,7 @@ Selecting an OpenAI model must use the normal OpenAI account path. Selecting a M
 
 The documented Codex configuration selects one `model_provider` and optionally loads `model_catalog_json` at startup. That is not a documented per-model routing mechanism. The current app-server schema accepts a provider on task start/resume, while a turn's model override does not include a provider field. Both catalog merging and provider routing need a desktop-level integration.
 
-The installed desktop build includes an internal custom-CLI hook. A local adapter now combines discovery and dispatch using one worker per loaded task. It passes isolated real app-server tests for routing, picker settings saves, provider switches, history, forks, restart/resume, and cancellation. The temporary development launcher uses the internal hook for a single app session. Both model groups are visible in a user-tested desktop session. The initial selection failure exposed missing settings handling, now covered by private preference storage and routing for existing-chat settings. GUI selection after that fix and automatic refresh remain unverified. This is not a documented stable plugin API or a supported installation option.
+The installed desktop build includes an internal custom-CLI hook. A local adapter now combines discovery and dispatch using one worker per loaded task. It passes isolated real app-server tests for routing, picker settings saves, provider switches, history, forks, restart/resume, and cancellation. The temporary launcher uses the internal hook for a single app session. After fixing new-chat preference saves and existing-chat settings routing, the user confirmed successful desktop model selection on September 12, 2026. Live Muse text/tool generation also passed. This is not a documented stable plugin API; the launcher remains experimental.
 
 The additive runtime now gives the native server a live Muse catalog; additions and removals apply to request validation without reinstalling. The older standalone native service still uses its fixed installed list. OpenAI discovery stays with the normal host model catalog. The desktop's filtering and cache behavior still need verification before claiming automatic picker updates.
 
