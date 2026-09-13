@@ -144,6 +144,26 @@ test('real app-server: additive discovery, isolated routes, switches, history, f
   const waitingTurn = await request('turn/start', { threadId: b.thread.id, model: 'muse/future-arbitrary-model', effort: 'low', input: [{ type: 'text', text: 'WAIT_FOR_INTERRUPT' }] });
   for (let i = 0; !seen.at(-1).history.includes('WAIT_FOR_INTERRUPT') && i < 100; i++) await new Promise(r => setTimeout(r, 10));
   assert.match(seen.at(-1).history, /WAIT_FOR_INTERRUPT/);
+  // Desktop prewarming can reserve three empty chats while another turn runs.
+  // Merely opening history must not consume a hard execution slot or stop it.
+  const activePeer = runtime.router.workers.get(b.thread.id).peer;
+  const prepared = [];
+  for (let i = 0; i < 3; i++) prepared.push(await request('thread/start', { model: 'openai-fixture-1', cwd: dir, approvalPolicy: 'never', sandbox: 'read-only' }));
+  const reopened = await request('thread/resume', { threadId: a.thread.id });
+  assert.match(JSON.stringify(reopened.thread.turns), /original-history-marker/);
+  const otherHistory = await request('thread/resume', { threadId: fork.thread.id });
+  assert.equal(otherHistory.modelProvider, museProvider);
+  await turn(a.thread.id, undefined, 'Continue while the other chat is still active.');
+  assert.equal(seen.at(-1).provider, 'openai');
+  assert.equal(runtime.router.workers.get(b.thread.id).peer, activePeer);
+  assert.equal(activePeer.closed, false); assert.equal(cancelled, false);
+  assert.equal(turns.has(waitingTurn.turn.id), false);
+  for (const chat of prepared) {
+    const peer = runtime.router.workers.get(chat.thread.id).peer;
+    await request('thread/delete', { threadId: chat.thread.id });
+    assert.equal(peer.closed, true);
+    assert.equal(runtime.router.workers.has(chat.thread.id), false);
+  }
   // Viewing/resuming an active task must not restart its worker.
   await request('thread/resume', { threadId: b.thread.id });
   await assert.rejects(request('turn/start', { threadId: b.thread.id, model: 'openai-fixture-1', input: [{ type: 'text', text: 'switch' }] }), /interrupt the current turn/);

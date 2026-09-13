@@ -41,11 +41,12 @@ export class RouteStore {
 // The coordinator handles account/catalog/global methods. Each loaded task has its
 // own worker, so a provider switch can unload it without touching other tasks.
 export class AdditiveRouter {
-  constructor({ coordinator, createWorker, catalog, store, preferences, emit, hostProvider = 'openai', maxWorkers = 4 }) {
+  constructor({ coordinator, createWorker, catalog, store, preferences, emit, hostProvider = 'openai', workerCacheSize = 4 }) {
     Object.assign(this, { coordinator, createWorker, catalog, store, preferences, emit, hostProvider });
     this.workers = new Map(); this.serverRequests = new Map(); this.queues = new Map(); this.allPeers = new Set([coordinator]);
     this.initialization = null; this.stopping = false;
-    this.maxWorkers = maxWorkers; this.opening = 0;
+    this.workerCacheSize = workerCacheSize; this.opening = 0;
+    this.inFlight = new Map(); this.trimming = Promise.resolve(); this.trimScheduled = false;
     this.attach(coordinator);
   }
   attach(peer, state) {
@@ -55,9 +56,24 @@ export class AdditiveRouter {
         this.serverRequests.set(id, { peer, id: message.id });
         this.emit({ ...message, id }); return;
       }
-      if (state && message.method === 'turn/started') state.active = true;
-      if (state && message.method === 'turn/completed') { state.active = false; state.persistedTurn = true; }
-      if (state && message.method === 'thread/status/changed') state.status = message.params.status;
+      if (message.method === 'serverRequest/resolved') {
+        for (const [id, entry] of this.serverRequests) {
+          if (entry.peer !== peer || entry.id !== message.params.requestId) continue;
+          this.serverRequests.delete(id);
+          this.emit({ ...message, params: { ...message.params, requestId: id } });
+          this.scheduleTrim(); return;
+        }
+      }
+      const rootEvent = state && message.params?.threadId != null && message.params.threadId === state.threadId;
+      if (rootEvent && message.method === 'turn/started') state.active = true;
+      if (rootEvent && message.method === 'turn/completed') { state.active = false; state.persistedTurn = true; this.scheduleTrim(); }
+      if (rootEvent && message.method === 'thread/status/changed') {
+        state.status = message.params.status; state.active = state.status.type === 'active';
+      }
+      if (state && ['thread/closed', 'thread/deleted'].includes(message.method)) {
+        if (rootEvent) { state.discarded = true; state.active = false; state.status = { type: 'notLoaded' }; }
+        this.scheduleTrim();
+      }
       // Account-wide events come from the coordinator, not from every worker.
       if (state && /^(account\/|config\/)/.test(message.method || '')) return;
       if (state?.route.muse && message.method === 'thread/settings/updated') {
@@ -72,6 +88,7 @@ export class AdditiveRouter {
     peer.on('closed', () => {
       for (const [id, entry] of this.serverRequests) if (entry.peer === peer) this.serverRequests.delete(id);
       this.allPeers.delete(peer);
+      if (state && this.workers.get(state.threadId) === state) this.workers.delete(state.threadId);
     });
   }
   presentThread(thread) {
@@ -100,9 +117,10 @@ export class AdditiveRouter {
       else this.coordinator.send(message);
       return;
     }
+    const id = message.params?.threadId;
+    if (id) this.inFlight.set(id, (this.inFlight.get(id) || 0) + 1);
     try {
       const execute = () => this.dispatch(message.method, message.params || {});
-      const id = message.params?.threadId;
       // Serialize task changes, but let interruption and approval replies through.
       let result;
       if (id && message.method !== 'turn/interrupt') {
@@ -113,7 +131,34 @@ export class AdditiveRouter {
       this.emit({ id: message.id, result: this.present(result) });
     } catch (error) {
       this.emit({ id: message.id, error: error.rpcError || { code: -32000, message: error.message || 'Additive routing failed. No fallback was attempted.' } });
+    } finally {
+      if (id) {
+        const count = this.inFlight.get(id) - 1;
+        if (count) this.inFlight.set(id, count); else this.inFlight.delete(id);
+      }
+      this.scheduleTrim();
     }
+  }
+  scheduleTrim() {
+    if (this.stopping || this.trimScheduled) return;
+    this.trimScheduled = true;
+    setImmediate(() => { this.trimScheduled = false; void this.trimWorkers(); });
+  }
+  trimWorkers() {
+    const trim = async () => {
+      if (this.stopping) return;
+      const count = () => this.opening + [...this.workers.values()].filter(s => !s.peer.closed).length;
+      const candidates = [...this.workers].filter(([, s]) => !s.active && !s.peer.closed && (s.discarded || (!s.ephemeral && s.persistedTurn)))
+        .sort((a, b) => Number(Boolean(b[1].discarded)) - Number(Boolean(a[1].discarded)) || a[1].lastUsed - b[1].lastUsed);
+      for (const [id, state] of candidates) {
+        if (this.stopping) return;
+        if (!state.discarded && count() <= this.workerCacheSize) continue;
+        if (this.inFlight.has(id) || this.workers.get(id) !== state) continue;
+        try { await this.retire(id, state); } catch { /* Protected work stays alive, even above the cache target. */ }
+      }
+    };
+    this.trimming = this.trimming.then(trim).catch(() => {});
+    return this.trimming;
   }
   async route(model, previous) {
     if (model != null) {
@@ -137,18 +182,16 @@ export class AdditiveRouter {
   }
   async open(method, params, route) {
     if (!this.initialization) throw new Error('Initialize the adapter before opening a task.');
-    const count = () => this.opening + [...this.workers.values()].filter(s => !s.peer.closed).length;
-    if (count() >= this.maxWorkers) {
-      const candidates = [...this.workers].filter(([, s]) => !s.active && !s.ephemeral && s.persistedTurn && !s.peer.closed).sort((a, b) => a[1].lastUsed - b[1].lastUsed);
-      for (const [id, candidate] of candidates) {
-        try { await this.retire(id, candidate); } catch { continue; }
-        if (count() < this.maxWorkers) break;
-      }
-      if (count() >= this.maxWorkers) throw new Error('The prototype has four busy or unsaved task workers. Finish a turn before opening another task.');
-    }
+    // Four is a cache target, not a limit on navigation or concurrent work.
+    // Reserve the opening worker before trimming so simultaneous opens cooperate.
     this.opening++;
     let peer;
-    try { peer = await this.createWorker(route); }
+    try {
+      await this.trimWorkers();
+      if (this.stopping) throw new Error('Adapter is stopping.');
+      peer = await this.createWorker(route);
+      if (this.stopping) { await peer.stop(); throw new Error('Adapter is stopping.'); }
+    }
     catch (error) { this.opening--; throw error; }
     const state = { peer, route, active: false, ephemeral: Boolean(params.ephemeral), resume: pickResume(params), lastUsed: Date.now(), persistedTurn: method !== 'thread/start' };
     this.allPeers.add(peer); this.attach(peer, state);
@@ -161,6 +204,8 @@ export class AdditiveRouter {
       if (result.modelProvider !== (route.muse ? museProvider : next.modelProvider)) throw new Error('Codex did not accept the selected provider. No turn was sent.');
       state.route = { muse: route.muse, model: result.model || route.model };
       state.ephemeral = Boolean(result.thread.ephemeral);
+      state.threadId = result.thread.id; state.status = result.thread.status;
+      state.active = state.status?.type === 'active';
       this.workers.set(result.thread.id, state);
       if (!state.ephemeral) await this.store.set(result.thread.id, state.route);
       return publicResult(result, route.muse);
@@ -168,16 +213,39 @@ export class AdditiveRouter {
     finally { this.opening--; }
   }
   async retire(id, state) {
-    if (state.active) throw new Error('Wait for or interrupt the current turn before switching providers.');
-    if (state.ephemeral) throw new Error('Cross-provider changes require a saved task in this prototype.');
-    if (!state.peer.closed) {
-      const loaded = await state.peer.request('thread/loaded/list', {});
-      if (loaded.data.some(other => other !== id)) throw new Error('This task has other loaded tasks or agents in its worker. Finish that work before switching providers.');
-    }
-    await state.peer.stop(); this.workers.delete(id);
+    if (state.retiring) return state.retiring;
+    const retire = async () => {
+      const assertIdle = () => {
+        if (state.active) throw new Error('Wait for or interrupt the current turn before switching providers.');
+        if (state.peer.pending?.size || [...this.serverRequests.values()].some(r => r.peer === state.peer)) throw new Error('This task has pending requests. Wait for them before switching providers.');
+      };
+      assertIdle();
+      if (state.ephemeral && !state.discarded) throw new Error('Cross-provider changes require a saved task in this prototype.');
+      if (!state.peer.closed) {
+        const loaded = await state.peer.request('thread/loaded/list', {});
+        if (loaded.data.some(other => other !== id)) throw new Error('This task has other loaded tasks or agents in its worker. Finish that work before switching providers.');
+        if (loaded.data.includes(id)) {
+          // Notifications can lag, and unsubscribe suppresses turn events. Verify
+          // runtime activity and background terminals before stopping the process.
+          const read = await state.peer.request('thread/read', { threadId: id });
+          state.status = read.thread.status; state.active = state.status?.type === 'active';
+          assertIdle();
+          const terminals = await state.peer.request('thread/backgroundTerminals/list', { threadId: id });
+          if (terminals.data.length || terminals.nextCursor) throw new Error('This task has background terminals. Stop them before switching providers.');
+        }
+        assertIdle();
+      }
+      await state.peer.stop();
+      if (this.workers.get(id) === state) this.workers.delete(id);
+    };
+    state.retiring = retire();
+    try { return await state.retiring; } finally { state.retiring = null; }
   }
   async dispatch(method, params) {
     if (this.stopping) throw new Error('Adapter is stopping.');
+    // An eviction holds the worker until it has stopped. A concurrent resume or
+    // turn then reopens the saved task instead of writing to a closing process.
+    await this.workers.get(params.threadId)?.retiring?.catch(() => {});
     if (method === 'initialize') {
       if (this.initialization) throw new Error('Adapter is already initialized.');
       const result = await this.coordinator.request(method, params); this.initialization = params; return result;
@@ -217,7 +285,7 @@ export class AdditiveRouter {
       if (state && method === 'thread/resume') {
         if (!state.peer.closed && state.route.muse === route.muse && state.route.model === route.model) {
           const result = await state.peer.request(method, { ...params, model: route.model, modelProvider: route.muse ? museProvider : this.hostProvider });
-          state.status = result.thread.status; state.active = result.thread.status?.type === 'active';
+          state.status = result.thread.status; state.active = result.thread.status?.type === 'active'; state.discarded = false; state.lastUsed = Date.now();
           return publicResult(result, route.muse);
         }
         await this.retire(params.threadId, state);
@@ -257,12 +325,16 @@ export class AdditiveRouter {
         return result;
       } catch (error) { state.active = state.status ? state.status.type === 'active' : previouslyActive; throw error; }
     }
-    const metadataOnly = new Set(['thread/read', 'thread/turns/list', 'thread/items/list', 'thread/archive', 'thread/unarchive', 'thread/delete', 'thread/name/set', 'thread/metadata/update']);
+    const metadataOnly = new Set(['thread/read', 'thread/turns/list', 'thread/items/list', 'thread/archive', 'thread/unarchive', 'thread/delete', 'thread/unsubscribe', 'thread/name/set', 'thread/metadata/update']);
     if ((!state || state.peer.closed) && !metadataOnly.has(method) && method !== 'turn/interrupt') {
       const route = await this.route(null, await this.prior(id));
       await this.open('thread/resume', { threadId: id }, route); state = this.workers.get(id);
     }
     const result = await (state && !state.peer.closed ? state.peer : this.coordinator).request(method, params);
+    if (state && method === 'thread/delete') {
+      state.discarded = true; state.active = false; state.status = { type: 'notLoaded' };
+      try { await this.retire(id, state); } catch { /* Retry cleanup after owned descendants or pending requests settle. */ }
+    }
     if (state && !state.peer.closed && result?.thread?.status) {
       state.status = result.thread.status; state.active = result.thread.status.type === 'active';
     }
@@ -271,6 +343,7 @@ export class AdditiveRouter {
   async stop() {
     this.stopping = true; this.catalog.stop();
     await Promise.allSettled([...this.allPeers].map(peer => peer.stop()));
+    await this.trimming;
     await this.store.writes;
     await this.preferences.writes;
   }

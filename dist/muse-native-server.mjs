@@ -216,7 +216,7 @@ import { join as join2, delimiter } from "node:path";
 
 // src/build-info.mjs
 var bridgeVersion = true ? "0.1.0" : "source";
-var bridgeBuild = true ? "951b62fc6cb4d651" : "source";
+var bridgeBuild = true ? "a47a3f1c15abc3e9" : "source";
 
 // src/msp.mjs
 function findMuse(env = process.env) {
