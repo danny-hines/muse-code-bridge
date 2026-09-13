@@ -14,7 +14,7 @@ The adapter has passed Codex app-server protocol tests. Those tests explicitly s
 
 This adapter uses a **prompted JSON handoff**, not a raw Meta inference endpoint: it sends the full Codex conversation and tool definitions to a fresh `muse exec` invocation, then translates Muse's structured answer into a Responses message or tool call. Muse's workspace shell, filesystem writes, and web tools are disabled. It runs in a temporary directory, without project rules or foreign personal context. The CLI still owns its native agent prompt/runtime; this does not prove that every Muse-native capability is absent.
 
-Only a completed Muse terminal result is accepted. Invalid JSON, unknown tools, incomplete runs, and unsupported inputs fail explicitly. The server does not execute requested Codex tools itself, retry model requests automatically, or forward an OpenAI request to Meta.
+The standalone service accepts only a completed Muse terminal result. The newer [additive runtime](additive-development.md) also supports an explicitly validated handoff at a successfully completed Meta response boundary, then intentionally stops Muse's outer loop. Invalid JSON, unknown tools, incomplete runs, and unsupported inputs fail explicitly. The server does not execute requested Codex tools itself, retry model requests automatically, or forward an OpenAI request to Meta.
 
 ## Development status
 

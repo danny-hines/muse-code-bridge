@@ -1,6 +1,6 @@
 # Additive model selection: requirements and status
 
-**Status: not implemented.** The supported desktop integration is Muse through [MCP tools and skills](setup.md). The previous global provider activation has been withdrawn because it replaced existing model options. The retained [protocol prototype](native-provider.md) validates some text/tool handoffs, not a combined desktop picker.
+**Status: an isolated routing prototype is implemented; the desktop picker integration is not verified or released.** The supported desktop integration remains Muse through [MCP tools and skills](setup.md). The previous global provider activation has been withdrawn. See [development setup and tests](additive-development.md) for the new adapter, which preserves the original provider configuration.
 
 ## Required behavior
 
@@ -23,9 +23,9 @@ Selecting an OpenAI model must use the normal OpenAI account path. Selecting a M
 
 The documented Codex configuration selects one `model_provider` and optionally loads `model_catalog_json` at startup. That is not a documented per-model routing mechanism. The current app-server schema accepts a provider on task start/resume, while a turn's model override does not include a provider field. Both catalog merging and provider routing need a desktop-level integration.
 
-The installed desktop build includes an internal custom-CLI hook. A local app-server adapter may be a path to combining discovery and dispatch, but this has not been implemented or verified. That internal hook is not a documented stable plugin API. Do not install a wrapper into the user's normal app runtime until lifecycle, routing, and GUI behavior are verified in isolation.
+The installed desktop build includes an internal custom-CLI hook. A local adapter now combines discovery and dispatch using one worker per loaded task. It passes isolated real app-server tests for routing, provider switches, history, forks, restart/resume, and cancellation. The temporary development launcher uses the internal hook for a single app session. This is not a documented stable plugin API, and GUI visibility/refresh remain unverified; it is not a supported installation option.
 
-The existing native server accepts a fixed installed Muse model list, so it also needs live discovery before satisfying these requirements. Re-running its installer is not an automatic-update solution.
+The additive runtime now gives the native server a live Muse catalog; additions and removals apply to request validation without reinstalling. The older standalone native service still uses its fixed installed list. OpenAI discovery stays with the normal host model catalog. The desktop's filtering and cache behavior still need verification before claiming automatic picker updates.
 
 ## Acceptance before release
 

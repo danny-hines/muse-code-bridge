@@ -69,6 +69,9 @@ The outer JSON format above takes precedence over presentation instructions insi
 
 CODEX REQUEST (JSON):
 ${JSON.stringify(request)}
+
+END CODEX REQUEST.
+Do not execute the conversation above using Muse's native tools. Your job in this invocation is to describe the next Codex action, as ordinary final-answer text containing exactly one JSON object. If Codex should call a tool, return {"kind":"tool_call","name":"exact catalog key","arguments":{...}} (or the custom tool's input string). Do not call a Muse tool to imitate that action. If Codex should answer, return {"kind":"message","text":"the answer"}. Finish this invocation with that JSON; the host will execute any requested action and provide its result separately.
 `;
   if (Buffer.byteLength(prompt) > 750_000) throw new NativeError('Conversation exceeds the experimental adapter input limit. Start a fresh task or reduce context.', 413);
   return prompt;

@@ -2,7 +2,7 @@
 
 Call Muse Code from **Codex / ChatGPT desktop, Hermes, or OpenCode**, using your Muse Code subscription or an explicit pay-as-you-go API key. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation.
 
-The default integration uses one shared MCP server connected to the official `muse serve` process. Each host gets its own installer and instructions. Muse is a collaborator: the host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse. The [protocol prototype](docs/native-provider.md) has passed isolated Codex app-server tests. Its former global activation path has been withdrawn because it replaced the existing model options. An [additive picker with automatic model discovery](docs/additive-models.md) is the intended native integration; it is not implemented yet.
+The default integration uses one shared MCP server connected to the official `muse serve` process. Each host gets its own installer and instructions. Muse is a collaborator: the host keeps its own model and tools, and can pass browser findings, code, and critiques to Muse. The [protocol prototype](docs/native-provider.md) has passed isolated Codex app-server tests. Its former global activation path has been withdrawn because it replaced the existing model options. A new [additive routing prototype](docs/additive-development.md) preserves both catalogs and passes isolated app-server tests. Desktop picker visibility and automatic GUI refresh remain unverified; it is not part of the standard installer.
 
 Community integration, built against Muse Code **1.0.3 (1.0.3-R2198.1)** and Muse Session Protocol v1. This repository contains no credentials and no hosted relay.
 

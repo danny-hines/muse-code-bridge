@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findMuse, museEnvironment } from './msp.mjs';
 import { NativeError, makePrompt } from './native-protocol.mjs';
+import { MuseDecisionReader } from './muse-decision.mjs';
 
-export async function runMuse(request, { signal, connection, executable = findMuse(), timeoutMs = 120_000 } = {}) {
+export async function runMuse(request, { signal, connection, executable = findMuse(), timeoutMs = 120_000, decisionAtModelBoundary = false } = {}) {
   const prompt = makePrompt(request);
   const workspace = await mkdtemp(join(tmpdir(), 'muse-provider-'));
   try {
@@ -17,7 +18,8 @@ export async function runMuse(request, { signal, connection, executable = findMu
         '--disable-shell', '--disable-write', '--disable-web-tools', '--no-foreign-personal-context',
         '--model', request.model, '--reasoning-effort', request.effort, '--workspace', workspace, '--prompt-file', file],
       { cwd: workspace, env: museEnvironment(process.env, connection), stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
-      let buffer = '', terminal, failure, bytes = 0, killTimer;
+      let buffer = '', terminal, failure, bytes = 0, killTimer, decision;
+      const decisions = decisionAtModelBoundary ? new MuseDecisionReader(request) : null;
       const stop = error => {
         failure ||= error;
         try { process.platform === 'win32' ? child.kill('SIGTERM') : process.kill(-child.pid, 'SIGTERM'); } catch {}
@@ -39,6 +41,10 @@ export async function runMuse(request, { signal, connection, executable = findMu
           try {
             const event = JSON.parse(line);
             if (event.payload_type?.startsWith('run.terminal.')) terminal = event.payload;
+            if (!decision && decisions) {
+              const complete = decisions.consume(event);
+              if (complete) { decision = complete; stop(); }
+            }
           } catch { stop(new NativeError('Muse emitted invalid JSONL.', 502)); }
         }
       });
@@ -46,6 +52,7 @@ export async function runMuse(request, { signal, connection, executable = findMu
       child.on('close', code => {
         clearTimeout(timer); clearTimeout(killTimer); signal?.removeEventListener('abort', abort);
         if (failure) reject(failure);
+        else if (decision) resolve(decision);
         else if (code !== 0 || terminal?.terminal !== 'completed' || typeof terminal.text !== 'string') reject(new NativeError(`Muse generation did not complete (${terminal?.terminal || 'process failure'}). No partial result was executed.`, 502));
         else resolve(terminal.text);
       });

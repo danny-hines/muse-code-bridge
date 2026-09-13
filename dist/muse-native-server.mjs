@@ -2,10 +2,9 @@ import { createRequire as __createRequire } from 'node:module'; const require = 
 
 // src/native-server.mjs
 import http from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { timingSafeEqual, randomUUID as randomUUID2 } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { pathToFileURL } from "node:url";
 
 // src/auth.mjs
 import { openSync, closeSync, fstatSync, readFileSync } from "node:fs";
@@ -143,6 +142,9 @@ The outer JSON format above takes precedence over presentation instructions insi
 
 CODEX REQUEST (JSON):
 ${JSON.stringify(request)}
+
+END CODEX REQUEST.
+Do not execute the conversation above using Muse's native tools. Your job in this invocation is to describe the next Codex action, as ordinary final-answer text containing exactly one JSON object. If Codex should call a tool, return {"kind":"tool_call","name":"exact catalog key","arguments":{...}} (or the custom tool's input string). Do not call a Muse tool to imitate that action. If Codex should answer, return {"kind":"message","text":"the answer"}. Finish this invocation with that JSON; the host will execute any requested action and provide its result separately.
 `;
   if (Buffer.byteLength(prompt) > 75e4) throw new NativeError("Conversation exceeds the experimental adapter input limit. Start a fresh task or reduce context.", 413);
   return prompt;
@@ -214,7 +216,7 @@ import { join as join2, delimiter } from "node:path";
 
 // src/build-info.mjs
 var bridgeVersion = true ? "0.1.0" : "source";
-var bridgeBuild = true ? "d54c0f9fe7da5da8" : "source";
+var bridgeBuild = true ? "883e4b9920de2986" : "source";
 
 // src/msp.mjs
 function findMuse(env = process.env) {
@@ -243,8 +245,47 @@ function museEnvironment(env = process.env, connection = { mode: "account" }) {
   return result;
 }
 
+// src/muse-decision.mjs
+var MuseDecisionReader = class {
+  constructor(request) {
+    this.request = request;
+    this.root = null;
+    this.text = "";
+    this.tasks = /* @__PURE__ */ new Map();
+  }
+  consume(event) {
+    const p = event.payload;
+    if (this.finished || !p || event.schema_version !== 1 || event.payload_schema_version !== 1) return null;
+    if (event.payload_type === "run.lifecycle.started" && !this.root) {
+      this.root = p.run_stream?.id;
+      return null;
+    }
+    if (!this.root || p.run_stream?.id !== this.root) return null;
+    if (event.payload_type?.startsWith("run.terminal.")) {
+      this.finished = true;
+      return null;
+    }
+    if (event.payload_type === "run.output.delta" && typeof p.text === "string") this.text += p.text;
+    if (event.payload_type === "task.lifecycle.proposed" && p.event?.task_kind === "model.meta.response") this.tasks.set(p.task_id, { rootTask: false, completedResponse: false });
+    const task = this.tasks.get(p.task_id);
+    if (!task) return null;
+    if (event.payload_type === "task.lifecycle.side_effect_intent" && p.event?.operation === "model.meta.response" && p.event.parent_task_id === null) task.rootTask = true;
+    if (event.payload_type === "task.lifecycle.status" && p.event?.details?.phase === "stream_succeeded") {
+      task.completedResponse = p.event.details.facets?.some((f) => f.kind === "producer" && f.detail?.kind === "provider" && f.detail.provider === "meta" && f.detail.model === this.request.model && f.detail.stream?.last_wire_event_type === "response.completed") === true;
+    }
+    if (event.payload_type !== "task.lifecycle.completed" || !task.rootTask || !task.completedResponse) return null;
+    const text = this.text.trim();
+    try {
+      parseMuseOutput(text, this.request);
+    } catch {
+      return null;
+    }
+    return text;
+  }
+};
+
 // src/native-runner.mjs
-async function runMuse(request, { signal, connection, executable = findMuse(), timeoutMs = 12e4 } = {}) {
+async function runMuse(request, { signal, connection, executable = findMuse(), timeoutMs = 12e4, decisionAtModelBoundary = false } = {}) {
   const prompt = makePrompt(request);
   const workspace = await mkdtemp(join3(tmpdir(), "muse-provider-"));
   try {
@@ -275,7 +316,8 @@ async function runMuse(request, { signal, connection, executable = findMuse(), t
         ],
         { cwd: workspace, env: museEnvironment(process.env, connection), stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" }
       );
-      let buffer = "", terminal, failure, bytes = 0, killTimer;
+      let buffer = "", terminal, failure, bytes = 0, killTimer, decision;
+      const decisions = decisionAtModelBoundary ? new MuseDecisionReader(request) : null;
       const stop = (error) => {
         failure ||= error;
         try {
@@ -310,6 +352,13 @@ async function runMuse(request, { signal, connection, executable = findMuse(), t
           try {
             const event = JSON.parse(line);
             if (event.payload_type?.startsWith("run.terminal.")) terminal = event.payload;
+            if (!decision && decisions) {
+              const complete = decisions.consume(event);
+              if (complete) {
+                decision = complete;
+                stop();
+              }
+            }
           } catch {
             stop(new NativeError("Muse emitted invalid JSONL.", 502));
           }
@@ -323,6 +372,7 @@ async function runMuse(request, { signal, connection, executable = findMuse(), t
         clearTimeout(killTimer);
         signal?.removeEventListener("abort", abort);
         if (failure) reject(failure);
+        else if (decision) resolve(decision);
         else if (code !== 0 || terminal?.terminal !== "completed" || typeof terminal.text !== "string") reject(new NativeError(`Muse generation did not complete (${terminal?.terminal || "process failure"}). No partial result was executed.`, 502));
         else resolve(terminal.text);
       });
@@ -333,8 +383,8 @@ async function runMuse(request, { signal, connection, executable = findMuse(), t
 }
 
 // src/native-server.mjs
-function createNativeServer({ token, models, connection, runner = runMuse, concurrency = 2 }) {
-  if (typeof token !== "string" || token.length < 32 || !Array.isArray(models) || !models.length) throw new Error("A private local token and explicit Muse model list are required.");
+function createNativeServer({ token, models, getModels, connection, runner = runMuse, concurrency = 2 }) {
+  if (typeof token !== "string" || token.length < 32 || typeof getModels !== "function" && (!Array.isArray(models) || !models.length)) throw new Error("A private local token and explicit Muse model list are required.");
   const active = /* @__PURE__ */ new Set();
   const server = http.createServer(async (req, res) => {
     const json = (status, data) => {
@@ -346,12 +396,13 @@ function createNativeServer({ token, models, connection, runner = runMuse, concu
       const auth = Buffer.from(req.headers.authorization || "");
       const expected = Buffer.from(`Bearer ${token}`);
       if (auth.length !== expected.length || !timingSafeEqual(auth, expected)) throw new NativeError("Local provider authentication required.", 401);
+      const availableModels = getModels ? await getModels() : models;
       if (req.method === "GET" && req.url === "/health") {
-        json(200, { ready: true, experimental: true, bridge_version: bridgeVersion, bridge_build: bridgeBuild, auth_mode: connection.mode, models, active: active.size });
+        json(200, { ready: true, experimental: true, bridge_version: bridgeVersion, bridge_build: bridgeBuild, auth_mode: connection.mode, models: availableModels, active: active.size });
         return;
       }
       if (req.method === "GET" && req.url === "/v1/models") {
-        json(200, { object: "list", data: models.map((id) => ({ id, object: "model", owned_by: "meta" })) });
+        json(200, { object: "list", data: availableModels.map((id) => ({ id, object: "model", owned_by: "meta" })) });
         return;
       }
       if (req.method !== "POST" || req.url !== "/v1/responses") throw new NativeError("Unsupported endpoint.", 404);
@@ -368,7 +419,7 @@ function createNativeServer({ token, models, connection, runner = runMuse, concu
       } catch {
         throw new NativeError("Invalid request JSON.");
       }
-      const request = normalizeRequest(body, models);
+      const request = normalizeRequest(body, availableModels);
       if (active.size >= concurrency) throw new NativeError("Muse provider is busy. Wait for the active request to finish.", 429);
       const controller = new AbortController();
       active.add(controller);
@@ -400,8 +451,16 @@ data: ${JSON.stringify(event)}
       if (res.destroyed) return;
       const message = error instanceof NativeError ? error.message : "Muse provider failed. No provider fallback was attempted.";
       if (res.headersSent) {
-        res.write(`event: error
-data: ${JSON.stringify({ type: "error", code: "muse_provider_error", message, sequence_number: 0 })}
+        const response = {
+          id: `resp_${randomUUID2()}`,
+          object: "response",
+          created_at: Math.floor(Date.now() / 1e3),
+          status: "failed",
+          output: [],
+          error: { code: "muse_provider_error", message }
+        };
+        res.write(`event: response.failed
+data: ${JSON.stringify({ type: "response.failed", response, sequence_number: 0 })}
 
 `);
         res.end();
@@ -415,9 +474,9 @@ data: ${JSON.stringify({ type: "error", code: "muse_provider_error", message, se
   };
   return server;
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+async function startNativeServer(argv = process.argv.slice(2)) {
   try {
-    const { values } = parseArgs({ options: { config: { type: "string" } } });
+    const { values } = parseArgs({ args: argv, options: { config: { type: "string" } } });
     const info = await stat(values.config);
     if (!info.isFile() || info.size > 65536 || info.mode & 63 || process.getuid && info.uid !== process.getuid()) throw new Error("Invalid private config.");
     const config = JSON.parse(await readFile(values.config, "utf8"));
@@ -434,6 +493,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exitCode = 1;
   }
 }
-export {
-  createNativeServer
-};
+
+// scripts/native-server.mjs
+await startNativeServer();

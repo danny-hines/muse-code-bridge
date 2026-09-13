@@ -15,8 +15,22 @@ test('native runner validates terminal completion, removes temporary prompts, an
     assert.match(await runMuse(request, { executable, connection: { mode: 'account' } }), /ok/);
     let saved = JSON.parse(await readFile(record));
     assert.ok(saved.args.includes('--disable-shell')); assert.ok(saved.args.includes('--disable-write')); assert.ok(saved.args.includes('--disable-web-tools'));
+    assert.equal(saved.args[saved.args.indexOf('--max-model-steps') + 1], '1');
     const workspace = saved.args[saved.args.indexOf('--workspace') + 1];
     await assert.rejects(access(workspace));
+    const intent = '{"kind":"tool_call","name":"probe","arguments":{}}';
+    const ev = (payload_type, payload = {}) => ({ schema_version: 1, payload_schema_version: 1, payload_type, payload: { run_stream: { id: 'root' }, ...payload } });
+    const events = [ev('run.lifecycle.started'),
+      ev('task.lifecycle.proposed', { task_id: 'model-task', event: { task_kind: 'model.meta.response' } }),
+      ev('task.lifecycle.side_effect_intent', { task_id: 'model-task', event: { operation: 'model.meta.response', parent_task_id: null } }),
+      ev('run.output.delta', { text: intent }),
+      ev('task.lifecycle.status', { task_id: 'model-task', event: { details: { phase: 'stream_succeeded', facets: [{ kind: 'producer', detail: { kind: 'provider', provider: 'meta', model: 'test', stream: { last_wire_event_type: 'response.completed' } } }] } } }),
+      ev('task.lifecycle.completed', { task_id: 'model-task' })];
+    await write(`for (const event of ${JSON.stringify(events)}) console.log(JSON.stringify(event)); setInterval(()=>{},1000);`);
+    assert.equal(await runMuse({ ...request, tools: [{ type: 'function', key: 'probe', name: 'probe' }] }, { executable, connection: { mode: 'account' }, decisionAtModelBoundary: true }), intent);
+    saved = JSON.parse(await readFile(record));
+    assert.throws(() => process.kill(saved.pid, 0));
+    await assert.rejects(access(saved.args[saved.args.indexOf('--workspace') + 1]));
     await write(`console.log(JSON.stringify({payload_type:'run.terminal.failed',payload:{terminal:'failed',text:'partial'}}));`);
     await assert.rejects(runMuse(request, { executable, connection: { mode: 'account' } }), /did not complete/);
     await write(`setInterval(()=>{},1000);`);

@@ -13,7 +13,7 @@ const bridgeBuild = fingerprint.digest('hex').slice(0, 16);
 await mkdir('plugins/muse-codex-bridge/scripts', { recursive: true });
 await mkdir('dist', { recursive: true });
 const result = await build({
-  entryPoints: { 'muse-server': 'src/server.mjs', 'muse-native-server': 'src/native-server.mjs', 'muse-native': 'scripts/native.mjs', 'configure-host': 'scripts/configure-host.mjs', 'configure-auth': 'scripts/configure-auth.mjs', 'configure-skills': 'scripts/configure-skills.mjs' },
+  entryPoints: { 'muse-server': 'src/server.mjs', 'muse-native-server': 'scripts/native-server.mjs', 'muse-native': 'scripts/native.mjs', 'muse-additive': 'scripts/additive.mjs', 'configure-host': 'scripts/configure-host.mjs', 'configure-auth': 'scripts/configure-auth.mjs', 'configure-skills': 'scripts/configure-skills.mjs' },
   outdir: 'dist', outExtension: { '.js': '.mjs' },
   bundle: true, platform: 'node', format: 'esm', target: 'node22',
   mainFields: ['module', 'main'],
