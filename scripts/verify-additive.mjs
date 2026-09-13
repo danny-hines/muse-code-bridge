@@ -42,10 +42,22 @@ try {
   assert.ok(merged.data.some(m => m.model === model), 'Select an available namespaced Muse model.');
   assert.ok(model.startsWith('muse/'), 'This test only spends Muse usage.');
   console.log(`Preserved ${host.data.length} OpenAI models and their default. Testing ${model}.`);
-  const start = await request('thread/start', { model, cwd: root, ephemeral: true, approvalPolicy: 'never', sandbox: 'read-only', dynamicTools: [{ name: 'codex_probe', description: 'Return the opaque verification marker. Call exactly once.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] });
+  const original = (await runtime.router.coordinator.request('config/read', {})).config;
+  const saveModel = (model, effort) => request('config/batchWrite', { edits: [
+    { keyPath: 'model', value: model, mergeStrategy: 'upsert' },
+    { keyPath: 'model_reasoning_effort', value: effort, mergeStrategy: 'upsert' },
+  ], filePath: null, expectedVersion: null, reloadUserConfig: true });
+  assert.equal((await saveModel(model, 'low')).status, 'ok');
+  assert.equal((await request('config/read', {})).config.model, model);
+  const start = await request('thread/start', { cwd: root, ephemeral: true, approvalPolicy: 'never', sandbox: 'read-only', dynamicTools: [{ name: 'codex_probe', description: 'Return the opaque verification marker. Call exactly once.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] });
   assert.equal(start.modelProvider, museProvider);
-  await request('turn/start', { threadId: start.thread.id, model, effort: 'low', input: [{ type: 'text', text: 'Call codex_probe exactly once. Then reply with the exact marker it returned. Do not use other tools or invent the marker.' }] });
+  assert.equal(start.model, model); assert.equal(start.reasoningEffort, 'low');
+  await request('turn/start', { threadId: start.thread.id, effort: 'low', input: [{ type: 'text', text: 'Call codex_probe exactly once. Then reply with the exact marker it returned. Do not use other tools or invent the marker.' }] });
   const turn = await done;
   assert.equal(turn.status, 'completed', JSON.stringify(turn.error)); assert.equal(calls, 1); assert.ok(answer.includes(marker));
-  console.log('PASS: live Muse → real Codex host tool → live Muse answer. Original OpenAI catalog/default preserved.');
+  await saveModel(host.data.find(m => m.isDefault).model, 'low');
+  assert.equal((await request('config/read', {})).config.model, host.data.find(m => m.isDefault).model);
+  const unchanged = (await runtime.router.coordinator.request('config/read', {})).config;
+  for (const key of ['model', 'model_reasoning_effort', 'model_provider', 'model_catalog_json']) assert.equal(unchanged[key], original[key]);
+  console.log('PASS: desktop preference save → new Muse task → real Codex host tool → live Muse answer → OpenAI preference restored. Original OpenAI catalog/default preserved.');
 } finally { clearTimeout(deadline); await runtime?.stop(); await rm(root, { recursive: true, force: true }); }

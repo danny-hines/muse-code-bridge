@@ -40,7 +40,7 @@ test('real app-server: additive discovery, isolated routes, switches, history, f
     '-c', `model_providers.fixture_openai={name="Fixture",base_url="http://127.0.0.1:${openai.address().port}/v1",experimental_bearer_token="${token}",requires_openai_auth=false,supports_websockets=false,wire_api="responses",request_max_retries=0,stream_max_retries=0}`];
   const env = { ...process.env, CODEX_HOME: join(dir, 'home') }; delete env.OPENAI_API_KEY;
   let runtime, seq = 0;
-  const pending = new Map(), turns = new Map(), waiting = new Map(), answers = new Map();
+  const pending = new Map(), turns = new Map(), waiting = new Map(), answers = new Map(), settings = new Map();
   const emit = m => {
     if (m.method && m.id !== undefined) {
       if (m.method === 'item/tool/call' && m.params.tool === 'codex_probe') {
@@ -53,6 +53,7 @@ test('real app-server: additive discovery, isolated routes, switches, history, f
     } else if (m.method === 'turn/completed') {
       const key = m.params.turn.id; turns.set(key, m.params.turn); waiting.get(key)?.(m.params.turn);
     } else if (m.method === 'item/agentMessage/delta') answers.set(m.params.threadId, (answers.get(m.params.threadId) || '') + m.params.delta);
+    else if (m.method === 'thread/settings/updated') settings.set(m.params.threadId, m.params.threadSettings);
   };
   const request = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++seq, timer = setTimeout(() => reject(new Error(`Timeout ${method}`)), 20000);
@@ -71,6 +72,10 @@ test('real app-server: additive discovery, isolated routes, switches, history, f
     assert.equal(result.status, 'completed', JSON.stringify(result.error)); return result;
   };
   const create = model => request('thread/start', { model, cwd: dir, approvalPolicy: 'never', sandbox: 'read-only', dynamicTools: [{ name: 'codex_probe', description: 'Return provider-specific opaque evidence.', inputSchema: { type: 'object', properties: { provider: { type: 'string' } }, required: ['provider'], additionalProperties: false } }] });
+  const waitForSettings = async (id, model) => {
+    for (let i = 0; settings.get(id)?.model !== model && i < 200; i++) await new Promise(r => setTimeout(r, 10));
+    assert.equal(settings.get(id)?.model, model);
+  };
   t.after(async () => {
     for (const p of pending.values()) clearTimeout(p.timer);
     await runtime?.stop(); await openai.stop(); await rm(dir, { recursive: true, force: true });
@@ -79,17 +84,41 @@ test('real app-server: additive discovery, isolated routes, switches, history, f
   const list = await request('model/list');
   assert.deepEqual(list.data.map(x => x.model), ['openai-fixture-1', 'muse/meta-fixture-1']);
   assert.equal(list.data[0].isDefault, true); assert.equal(list.data[1].isDefault, false);
-  const a = await create('openai-fixture-1'); const b = await create('muse/meta-fixture-1');
+  // Replay the exact desktop new-chat picker RPC (model + effort in one batch).
+  const saveModel = (model, effort) => request('config/batchWrite', { edits: [
+    { keyPath: 'model', value: model, mergeStrategy: 'upsert' },
+    { keyPath: 'model_reasoning_effort', value: effort, mergeStrategy: 'upsert' },
+  ], filePath: null, expectedVersion: null, reloadUserConfig: true });
+  const saved = await saveModel('muse/meta-fixture-1', 'low');
+  assert.equal(saved.status, 'ok'); assert.equal(saved.filePath, join(dir, 'state/preferences.json'));
+  const selected = await request('config/read', { includeLayers: true, cwd: dir });
+  assert.equal(selected.config.model, 'muse/meta-fixture-1'); assert.equal(selected.config.model_reasoning_effort, 'low');
+  assert.equal(selected.config.model_provider, 'fixture_openai');
+  assert.equal(selected.origins.model.version, saved.version);
+  assert.equal(selected.layers.find(l => l.name.type === 'user').config.model, 'openai-fixture-1');
+  assert.equal(await readFile(configPath, 'utf8'), config);
+  const a = await create('openai-fixture-1'); const b = await create(null);
   assert.equal(a.modelProvider, 'fixture_openai'); assert.equal(b.modelProvider, museProvider);
   assert.equal(b.model, 'muse/meta-fixture-1');
+  assert.equal(b.reasoningEffort, 'low');
   await Promise.all([turn(a.thread.id, 'openai-fixture-1'), turn(b.thread.id, 'muse/meta-fixture-1')]);
   assert.match(answers.get(a.thread.id), /tool-evidence-openai/); assert.match(answers.get(b.thread.id), /tool-evidence-muse/);
   assert.ok(seen.filter(x => x.provider === 'openai').every(x => x.model.startsWith('openai-')));
   assert.ok(seen.filter(x => x.provider === 'muse').every(x => x.model.startsWith('meta-')));
   // The same task, with the full earlier conversation, switches providers twice.
-  await turn(a.thread.id, 'muse/meta-fixture-1', 'Remember original-history-marker. Continue.');
+  // Existing-chat picker uses thread/settings/update, then can omit turn.model.
+  await request('thread/settings/update', { threadId: a.thread.id, model: 'muse/meta-fixture-1', effort: 'low', multiAgentMode: 'explicitRequestOnly' });
+  await waitForSettings(a.thread.id, 'muse/meta-fixture-1');
+  assert.equal(settings.get(a.thread.id).model, 'muse/meta-fixture-1');
+  assert.equal(settings.get(a.thread.id).collaborationMode.settings.model, 'muse/meta-fixture-1');
+  assert.equal(settings.get(a.thread.id).modelProvider, museProvider);
+  await turn(a.thread.id, undefined, 'Remember original-history-marker. Continue.');
   assert.equal(seen.at(-1).provider, 'muse'); assert.match(seen.at(-1).history, /tool-evidence-openai/);
-  await turn(a.thread.id, 'openai-fixture-1', 'Continue after provider switch.');
+  await request('thread/settings/update', { threadId: a.thread.id, model: 'openai-fixture-1', effort: 'low' });
+  await waitForSettings(a.thread.id, 'openai-fixture-1');
+  assert.equal(settings.get(a.thread.id).model, 'openai-fixture-1');
+  assert.equal(settings.get(a.thread.id).modelProvider, 'fixture_openai');
+  await turn(a.thread.id, undefined, 'Continue after provider switch.');
   assert.equal(seen.at(-1).provider, 'openai'); assert.match(seen.at(-1).history, /original-history-marker/);
   // A newly discovered Muse ID is accepted without editing installed settings.
   museModels = [...museModels, { modelId: 'future-arbitrary-model' }]; await runtime.catalog.refresh();
@@ -99,6 +128,13 @@ test('real app-server: additive discovery, isolated routes, switches, history, f
   assert.equal(fork.modelProvider, museProvider); await turn(fork.thread.id, undefined);
   assert.equal(seen.at(-1).provider, 'muse');
   await runtime.stop(); runtime = null; await boot();
+  assert.equal((await request('config/read')).config.model, 'muse/meta-fixture-1');
+  const afterRestart = await create(null); await turn(afterRestart.thread.id, undefined);
+  assert.equal(seen.at(-1).provider, 'muse'); assert.equal(seen.at(-1).model, 'meta-fixture-1');
+  // A Muse default does not change the provider of an existing OpenAI task.
+  await turn(a.thread.id, undefined); assert.equal(seen.at(-1).provider, 'openai');
+  await saveModel('openai-fixture-1', 'low');
+  assert.equal((await request('config/read')).config.model, 'openai-fixture-1');
   const resumed = await request('thread/resume', { threadId: b.thread.id });
   assert.equal(resumed.modelProvider, museProvider); await turn(b.thread.id, undefined);
   assert.equal(seen.at(-1).model, 'future-arbitrary-model');
@@ -118,12 +154,19 @@ test('real app-server: additive discovery, isolated routes, switches, history, f
   const before = seen.length;
   await assert.rejects(turn(b.thread.id, 'muse/future-arbitrary-model'), /not in the current account catalog/);
   assert.equal(seen.length, before);
+  await saveModel('muse/meta-fixture-1', 'low');
   discoveryFails = true; await runtime.catalog.refresh();
   await turn(a.thread.id, 'openai-fixture-1'); assert.equal(seen.at(-1).provider, 'openai');
   await assert.rejects(turn(b.thread.id, 'muse/meta-fixture-1'), /discovery failed/);
-  await assert.rejects(request('config/value/write', { keyPath: 'model', value: 'muse/meta-fixture-1', mergeStrategy: 'replace' }), /Global provider/);
+  const countBeforeUnavailableDefault = seen.length;
+  await assert.rejects(create(null), /discovery failed/);
+  assert.equal(seen.length, countBeforeUnavailableDefault);
+  await assert.rejects(saveModel('muse/meta-fixture-1', 'low'), /discovery failed/);
+  await assert.rejects(request('config/value/write', { keyPath: 'model_provider', value: museProvider, mergeStrategy: 'replace' }), /Global provider/);
+  await saveModel('openai-fixture-1', 'low');
+  assert.equal((await request('config/read')).config.model, 'openai-fixture-1');
   for (let i = 0; i < 5; i++) {
-    const extra = await create('openai-fixture-1'); await turn(extra.thread.id, 'openai-fixture-1');
+    const extra = await create(null); await turn(extra.thread.id, undefined);
     assert.ok([...runtime.router.workers.values()].filter(s => !s.peer.closed).length <= 4);
   }
   // An evicted saved task is resumed lazily, retaining its history and provider.

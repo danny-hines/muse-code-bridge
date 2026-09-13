@@ -41,8 +41,8 @@ export class RouteStore {
 // The coordinator handles account/catalog/global methods. Each loaded task has its
 // own worker, so a provider switch can unload it without touching other tasks.
 export class AdditiveRouter {
-  constructor({ coordinator, createWorker, catalog, store, emit, hostProvider = 'openai', maxWorkers = 4 }) {
-    Object.assign(this, { coordinator, createWorker, catalog, store, emit, hostProvider });
+  constructor({ coordinator, createWorker, catalog, store, preferences, emit, hostProvider = 'openai', maxWorkers = 4 }) {
+    Object.assign(this, { coordinator, createWorker, catalog, store, preferences, emit, hostProvider });
     this.workers = new Map(); this.serverRequests = new Map(); this.queues = new Map(); this.allPeers = new Set([coordinator]);
     this.initialization = null; this.stopping = false;
     this.maxWorkers = maxWorkers; this.opening = 0;
@@ -60,6 +60,13 @@ export class AdditiveRouter {
       if (state && message.method === 'thread/status/changed') state.status = message.params.status;
       // Account-wide events come from the coordinator, not from every worker.
       if (state && /^(account\/|config\/)/.test(message.method || '')) return;
+      if (state?.route.muse && message.method === 'thread/settings/updated') {
+        const settings = message.params.threadSettings;
+        this.emit({ ...message, params: { ...message.params, threadSettings: { ...settings,
+          model: museModelName(settings.model),
+          collaborationMode: { ...settings.collaborationMode, settings: { ...settings.collaborationMode.settings, model: museModelName(settings.collaborationMode.settings.model) } },
+        } } }); return;
+      }
       this.emit(message.params?.thread ? { ...message, params: { ...message.params, thread: this.presentThread(message.params.thread) } } : message);
     });
     peer.on('closed', () => {
@@ -180,18 +187,32 @@ export class AdditiveRouter {
       const result = await this.coordinator.request(method, params);
       return { ...result, data: [...new Set([...result.data, ...[...this.workers].filter(([, state]) => !state.peer.closed).map(([id]) => id)])] };
     }
-    // Do not persist namespaced Muse choices into the user's normal Codex config.
-    if (method === 'config/value/write' && ['model', 'model_provider', 'model_catalog_json'].includes(params.keyPath)) {
-      if (params.keyPath !== 'model' || (isMuseModel(params.value) && !this.catalog.hostIds.has(params.value))) throw new Error('Global provider/catalog changes are not supported by the additive prototype. Select a model for the task instead.');
+    if (method === 'config/read') {
+      await this.preferences.writes;
+      return this.preferences.project(await this.coordinator.request(method, params));
     }
-    if (method === 'config/batchWrite' && params.edits?.some(e => ['model_provider', 'model_catalog_json'].includes(e.keyPath) || (e.keyPath === 'model' && isMuseModel(e.value)))) throw new Error('Cannot write additive provider choices into global Codex settings.');
+    if (method === 'config/value/write' || method === 'config/batchWrite') return this.preferences.dispatch(method, params, {
+      readConfig: params => this.coordinator.request('config/read', params),
+      forward: (method, params) => this.coordinator.request(method, params),
+      validateModel: model => this.route(model),
+    });
     if (lifecycle.has(method)) {
+      let defaultRoute;
+      if (method === 'thread/start') await this.preferences.writes;
+      if (method === 'thread/start' && this.preferences.hasValues && params.model == null) {
+        const selected = this.preferences.selection(await this.coordinator.request('config/read', { cwd: params.cwd ?? null }));
+        const defaults = selected.config; defaultRoute = selected.route;
+        params = { ...params, model: defaults.model, config: {
+          ...(defaults.model_reasoning_effort != null ? { model_reasoning_effort: defaults.model_reasoning_effort } : {}),
+          ...params.config,
+        } };
+      }
       let prior;
       if (method !== 'thread/start') {
         prior = this.workers.get(params.threadId)?.route || this.store.get(params.threadId);
         if (!prior && params.model == null) prior = await this.prior(params.threadId);
       }
-      const route = await this.route(params.model, prior);
+      const route = await this.route(params.model, prior || defaultRoute);
       const state = this.workers.get(params.threadId);
       if (state && method === 'thread/resume') {
         if (!state.peer.closed && state.route.muse === route.muse && state.route.model === route.model) {
@@ -210,7 +231,7 @@ export class AdditiveRouter {
     if (!id) return this.coordinator.request(method, params);
     let state = this.workers.get(id);
     if (state) state.lastUsed = Date.now();
-    if (method === 'turn/start') {
+    if (method === 'turn/start' || method === 'thread/settings/update') {
       const model = params.model ?? params.collaborationMode?.settings?.model;
       const route = await this.route(model, state?.route || this.store.get(id) || (model == null ? await this.prior(id) : undefined));
       const switchWorker = !state || state.peer.closed || state.route.muse !== route.muse || (route.muse && state.route.model !== route.model);
@@ -221,6 +242,12 @@ export class AdditiveRouter {
       }
       const next = { ...params, ...(route.model ? { model: route.model } : {}) };
       if (next.collaborationMode?.settings?.model) next.collaborationMode = { ...next.collaborationMode, settings: { ...next.collaborationMode.settings, model: route.model } };
+      if (method === 'thread/settings/update') {
+        const result = await state.peer.request(method, next);
+        state.route = { ...route, model: route.model || state.route.model };
+        if (!state.ephemeral) await this.store.set(id, state.route);
+        return result;
+      }
       state.route = { ...route, model: route.model || state.route.model };
       if (!state.ephemeral) await this.store.set(id, state.route);
       const previouslyActive = state.active;
@@ -245,5 +272,6 @@ export class AdditiveRouter {
     this.stopping = true; this.catalog.stop();
     await Promise.allSettled([...this.allPeers].map(peer => peer.stop()));
     await this.store.writes;
+    await this.preferences.writes;
   }
 }

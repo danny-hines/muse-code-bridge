@@ -33,10 +33,10 @@ function assertStdio(args) {
 }
 
 // src/additive-runtime.mjs
-import { randomBytes, randomUUID as randomUUID5 } from "node:crypto";
-import { mkdtemp as mkdtemp2, writeFile as writeFile3, rm as rm2, mkdir as mkdir2, open, unlink as unlink2 } from "node:fs/promises";
+import { randomBytes, randomUUID as randomUUID6 } from "node:crypto";
+import { mkdtemp as mkdtemp2, writeFile as writeFile4, rm as rm2, mkdir as mkdir3, open, unlink as unlink3 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { join as join4, resolve } from "node:path";
+import { join as join4, resolve as resolve2 } from "node:path";
 
 // src/additive-router.mjs
 import { randomUUID as randomUUID2 } from "node:crypto";
@@ -117,7 +117,7 @@ function readConnection(env = process.env) {
 
 // src/build-info.mjs
 var bridgeVersion = true ? "0.1.0" : "source";
-var bridgeBuild = true ? "883e4b9920de2986" : "source";
+var bridgeBuild = true ? "951b62fc6cb4d651" : "source";
 
 // src/msp.mjs
 function findMuse(env = process.env) {
@@ -229,12 +229,12 @@ var MuseHost = class extends EventEmitter {
   request(method, params) {
     if (this.closed) return Promise.reject(new Error("Muse connection is closed."));
     const id = ++this.nextId;
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Muse ${method} acknowledgement timed out. Its outcome is unknown; check the session before retrying.`));
       }, this.timeoutMs);
-      this.pending.set(id, { resolve: resolve2, reject, timer });
+      this.pending.set(id, { resolve: resolve3, reject, timer });
       this.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
     });
   }
@@ -430,8 +430,8 @@ var RouteStore = class {
   }
 };
 var AdditiveRouter = class {
-  constructor({ coordinator, createWorker, catalog, store, emit, hostProvider = "openai", maxWorkers = 4 }) {
-    Object.assign(this, { coordinator, createWorker, catalog, store, emit, hostProvider });
+  constructor({ coordinator, createWorker, catalog, store, preferences, emit, hostProvider = "openai", maxWorkers = 4 }) {
+    Object.assign(this, { coordinator, createWorker, catalog, store, preferences, emit, hostProvider });
     this.workers = /* @__PURE__ */ new Map();
     this.serverRequests = /* @__PURE__ */ new Map();
     this.queues = /* @__PURE__ */ new Map();
@@ -457,6 +457,15 @@ var AdditiveRouter = class {
       }
       if (state && message.method === "thread/status/changed") state.status = message.params.status;
       if (state && /^(account\/|config\/)/.test(message.method || "")) return;
+      if (state?.route.muse && message.method === "thread/settings/updated") {
+        const settings = message.params.threadSettings;
+        this.emit({ ...message, params: { ...message.params, threadSettings: {
+          ...settings,
+          model: museModelName(settings.model),
+          collaborationMode: { ...settings.collaborationMode, settings: { ...settings.collaborationMode.settings, model: museModelName(settings.collaborationMode.settings.model) } }
+        } } });
+        return;
+      }
       this.emit(message.params?.thread ? { ...message, params: { ...message.params, thread: this.presentThread(message.params.thread) } } : message);
     });
     peer.on("closed", () => {
@@ -602,17 +611,33 @@ var AdditiveRouter = class {
       const result2 = await this.coordinator.request(method, params);
       return { ...result2, data: [.../* @__PURE__ */ new Set([...result2.data, ...[...this.workers].filter(([, state2]) => !state2.peer.closed).map(([id2]) => id2)])] };
     }
-    if (method === "config/value/write" && ["model", "model_provider", "model_catalog_json"].includes(params.keyPath)) {
-      if (params.keyPath !== "model" || isMuseModel(params.value) && !this.catalog.hostIds.has(params.value)) throw new Error("Global provider/catalog changes are not supported by the additive prototype. Select a model for the task instead.");
+    if (method === "config/read") {
+      await this.preferences.writes;
+      return this.preferences.project(await this.coordinator.request(method, params));
     }
-    if (method === "config/batchWrite" && params.edits?.some((e) => ["model_provider", "model_catalog_json"].includes(e.keyPath) || e.keyPath === "model" && isMuseModel(e.value))) throw new Error("Cannot write additive provider choices into global Codex settings.");
+    if (method === "config/value/write" || method === "config/batchWrite") return this.preferences.dispatch(method, params, {
+      readConfig: (params2) => this.coordinator.request("config/read", params2),
+      forward: (method2, params2) => this.coordinator.request(method2, params2),
+      validateModel: (model) => this.route(model)
+    });
     if (lifecycle.has(method)) {
+      let defaultRoute;
+      if (method === "thread/start") await this.preferences.writes;
+      if (method === "thread/start" && this.preferences.hasValues && params.model == null) {
+        const selected = this.preferences.selection(await this.coordinator.request("config/read", { cwd: params.cwd ?? null }));
+        const defaults = selected.config;
+        defaultRoute = selected.route;
+        params = { ...params, model: defaults.model, config: {
+          ...defaults.model_reasoning_effort != null ? { model_reasoning_effort: defaults.model_reasoning_effort } : {},
+          ...params.config
+        } };
+      }
       let prior;
       if (method !== "thread/start") {
         prior = this.workers.get(params.threadId)?.route || this.store.get(params.threadId);
         if (!prior && params.model == null) prior = await this.prior(params.threadId);
       }
-      const route = await this.route(params.model, prior);
+      const route = await this.route(params.model, prior || defaultRoute);
       const state2 = this.workers.get(params.threadId);
       if (state2 && method === "thread/resume") {
         if (!state2.peer.closed && state2.route.muse === route.muse && state2.route.model === route.model) {
@@ -632,7 +657,7 @@ var AdditiveRouter = class {
     if (!id) return this.coordinator.request(method, params);
     let state = this.workers.get(id);
     if (state) state.lastUsed = Date.now();
-    if (method === "turn/start") {
+    if (method === "turn/start" || method === "thread/settings/update") {
       const model = params.model ?? params.collaborationMode?.settings?.model;
       const route = await this.route(model, state?.route || this.store.get(id) || (model == null ? await this.prior(id) : void 0));
       const switchWorker = !state || state.peer.closed || state.route.muse !== route.muse || route.muse && state.route.model !== route.model;
@@ -644,6 +669,12 @@ var AdditiveRouter = class {
       }
       const next = { ...params, ...route.model ? { model: route.model } : {} };
       if (next.collaborationMode?.settings?.model) next.collaborationMode = { ...next.collaborationMode, settings: { ...next.collaborationMode.settings, model: route.model } };
+      if (method === "thread/settings/update") {
+        const result2 = await state.peer.request(method, next);
+        state.route = { ...route, model: route.model || state.route.model };
+        if (!state.ephemeral) await this.store.set(id, state.route);
+        return result2;
+      }
       state.route = { ...route, model: route.model || state.route.model };
       if (!state.ephemeral) await this.store.set(id, state.route);
       const previouslyActive = state.active;
@@ -674,6 +705,7 @@ var AdditiveRouter = class {
     this.catalog.stop();
     await Promise.allSettled([...this.allPeers].map((peer) => peer.stop()));
     await this.store.writes;
+    await this.preferences.writes;
   }
 };
 
@@ -689,16 +721,16 @@ var CodexProcess = class extends EventEmitter2 {
     this.closed = false;
     this.timeoutMs = timeoutMs;
     this.child = spawn2(executable, args, { env, cwd, stdio: ["pipe", "pipe", "pipe"] });
-    this.exited = new Promise((resolve2) => {
+    this.exited = new Promise((resolve3) => {
       this.child.once("exit", () => {
         this.didExit = true;
         this.fail();
-        resolve2();
+        resolve3();
       });
       this.child.once("error", () => {
         this.didExit = true;
         this.fail();
-        resolve2();
+        resolve3();
       });
     });
     this.child.stderr.on("data", () => {
@@ -742,13 +774,13 @@ var CodexProcess = class extends EventEmitter2 {
   }
   request(method, params) {
     if (this.closed) return Promise.reject(new Error("Codex connection closed."));
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const id = ++this.nextId;
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Codex ${method} timed out. Its outcome is unknown; no retry was attempted.`));
       }, this.timeoutMs);
-      this.pending.set(id, { resolve: resolve2, reject, timer });
+      this.pending.set(id, { resolve: resolve3, reject, timer });
       this.send({ id, method, params });
     });
   }
@@ -964,7 +996,7 @@ async function runMuse(request, { signal, connection, executable = findMuse(), t
   try {
     const file = join3(workspace, "request.txt");
     await writeFile2(file, prompt, { mode: 384 });
-    return await new Promise((resolve2, reject) => {
+    return await new Promise((resolve3, reject) => {
       signal?.throwIfAborted();
       const child = spawn3(
         executable,
@@ -1045,9 +1077,9 @@ async function runMuse(request, { signal, connection, executable = findMuse(), t
         clearTimeout(killTimer);
         signal?.removeEventListener("abort", abort);
         if (failure) reject(failure);
-        else if (decision) resolve2(decision);
+        else if (decision) resolve3(decision);
         else if (code !== 0 || terminal?.terminal !== "completed" || typeof terminal.text !== "string") reject(new NativeError(`Muse generation did not complete (${terminal?.terminal || "process failure"}). No partial result was executed.`, 502));
-        else resolve2(terminal.text);
+        else resolve3(terminal.text);
       });
     });
   } finally {
@@ -1143,7 +1175,7 @@ data: ${JSON.stringify({ type: "response.failed", response, sequence_number: 0 }
   server.stop = async () => {
     for (const controller of active) controller.abort();
     server.closeAllConnections();
-    await new Promise((resolve2) => server.close(resolve2));
+    await new Promise((resolve3) => server.close(resolve3));
   };
   return server;
 }
@@ -1177,6 +1209,808 @@ function makeCatalog(models) {
   })) };
 }
 
+// src/additive-preferences.mjs
+import { createHash, randomUUID as randomUUID5 } from "node:crypto";
+import { mkdir as mkdir2, readFile as readFile2, writeFile as writeFile3, rename as rename2, unlink as unlink2 } from "node:fs/promises";
+import { dirname as dirname2, resolve } from "node:path";
+
+// node_modules/smol-toml/dist/date.js
+var DATE_TIME_RE = /^(\d{4}-\d{2}-\d{2})?[T ]?(?:(\d{2}):\d{2}(?::\d{2}(?:\.\d+)?)?)?(Z|[-+]\d{2}:\d{2})?$/i;
+var TomlDate = class _TomlDate extends Date {
+  #hasDate = false;
+  #hasTime = false;
+  #offset = null;
+  constructor(date) {
+    let hasDate = true;
+    let hasTime = true;
+    let offset = "Z";
+    if (typeof date === "string") {
+      let match = date.match(DATE_TIME_RE);
+      if (match) {
+        if (!match[1]) {
+          hasDate = false;
+          date = `0000-01-01T${date}`;
+        }
+        hasTime = !!match[2];
+        hasTime && date[10] === " " && (date = date.replace(" ", "T"));
+        if (match[2] && +match[2] > 23) {
+          date = "";
+        } else {
+          offset = match[3] || null;
+          date = date.toUpperCase();
+          if (!offset && hasTime)
+            date += "Z";
+        }
+      } else {
+        date = "";
+      }
+    }
+    super(date);
+    if (!isNaN(this.getTime())) {
+      this.#hasDate = hasDate;
+      this.#hasTime = hasTime;
+      this.#offset = offset;
+    }
+  }
+  isDateTime() {
+    return this.#hasDate && this.#hasTime;
+  }
+  isLocal() {
+    return !this.#hasDate || !this.#hasTime || !this.#offset;
+  }
+  isDate() {
+    return this.#hasDate && !this.#hasTime;
+  }
+  isTime() {
+    return this.#hasTime && !this.#hasDate;
+  }
+  isValid() {
+    return this.#hasDate || this.#hasTime;
+  }
+  toISOString() {
+    let iso = super.toISOString();
+    if (this.isDate())
+      return iso.slice(0, 10);
+    if (this.isTime())
+      return iso.slice(11, 23);
+    if (this.#offset === null)
+      return iso.slice(0, -1);
+    if (this.#offset === "Z")
+      return iso;
+    let offset = +this.#offset.slice(1, 3) * 60 + +this.#offset.slice(4, 6);
+    offset = this.#offset[0] === "-" ? offset : -offset;
+    let offsetDate = new Date(this.getTime() - offset * 6e4);
+    return offsetDate.toISOString().slice(0, -1) + this.#offset;
+  }
+  static wrapAsOffsetDateTime(jsDate, offset = "Z") {
+    let date = new _TomlDate(jsDate);
+    date.#offset = offset;
+    return date;
+  }
+  static wrapAsLocalDateTime(jsDate) {
+    let date = new _TomlDate(jsDate);
+    date.#offset = null;
+    return date;
+  }
+  static wrapAsLocalDate(jsDate) {
+    let date = new _TomlDate(jsDate);
+    date.#hasTime = false;
+    date.#offset = null;
+    return date;
+  }
+  static wrapAsLocalTime(jsDate) {
+    let date = new _TomlDate(jsDate);
+    date.#hasDate = false;
+    date.#offset = null;
+    return date;
+  }
+};
+
+// node_modules/smol-toml/dist/error.js
+function getLineColFromPtr(string, ptr) {
+  let lines = string.slice(0, ptr).split(/\r\n|\n|\r/g);
+  return [lines.length, lines.pop().length + 1];
+}
+function makeCodeBlock(string, line, column) {
+  let lines = string.split(/\r\n|\n|\r/g);
+  let codeblock = "";
+  let numberLen = (Math.log10(line + 1) | 0) + 1;
+  for (let i = line - 1; i <= line + 1; i++) {
+    let l = lines[i - 1];
+    if (!l)
+      continue;
+    codeblock += i.toString().padEnd(numberLen, " ");
+    codeblock += ":  ";
+    codeblock += l;
+    codeblock += "\n";
+    if (i === line) {
+      codeblock += " ".repeat(numberLen + column + 2);
+      codeblock += "^\n";
+    }
+  }
+  return codeblock;
+}
+var TomlError = class extends Error {
+  line;
+  column;
+  codeblock;
+  constructor(message, options) {
+    const [line, column] = getLineColFromPtr(options.toml, options.ptr);
+    const codeblock = makeCodeBlock(options.toml, line, column);
+    super(`Invalid TOML document: ${message}
+
+${codeblock}`, options);
+    this.line = line;
+    this.column = column;
+    this.codeblock = codeblock;
+  }
+};
+
+// node_modules/smol-toml/dist/util.js
+function indexOfNewline(str, start = 0) {
+  let idx = str.indexOf("\n", start);
+  if (str.charCodeAt(idx - 1) === 13)
+    idx--;
+  return idx;
+}
+function skipComment(ctx) {
+  for (; ctx.p < ctx.s.length; ctx.p++) {
+    let c = ctx.s.charCodeAt(ctx.p);
+    if (c === 10)
+      break;
+    if (c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10) {
+      ctx.p++;
+      break;
+    }
+    if (c < 32 && c !== 9 || c === 127) {
+      throw new TomlError("control characters are not allowed in comments", {
+        toml: ctx.s,
+        ptr: ctx.p
+      });
+    }
+  }
+}
+function skipVoid(ctx, banNewLines, banComments) {
+  let c;
+  while (1) {
+    while ((c = ctx.s.charCodeAt(ctx.p)) === 32 || c === 9 || !banNewLines && (c === 10 || c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10))
+      ctx.p++;
+    if (banComments || c !== 35)
+      break;
+    skipComment(ctx);
+  }
+}
+function skipUntil(ctx, sep, end) {
+  let ptr = ctx.p;
+  if (!end) {
+    ptr = indexOfNewline(ctx.s, ptr);
+    ctx.p = ptr < 0 ? ctx.s.length : ptr;
+    return;
+  }
+  for (; ctx.p < ctx.s.length; ctx.p++) {
+    let c = ctx.s.charCodeAt(ctx.p);
+    if (c === 35) {
+      skipComment(ctx);
+    } else if (c === end || c === sep) {
+      return;
+    }
+  }
+  throw new TomlError("cannot find end of structure", {
+    toml: ctx.s,
+    ptr
+  });
+}
+
+// node_modules/smol-toml/dist/primitive.js
+var INT_REGEX = /^((0x[0-9a-fA-F](_?[0-9a-fA-F])*)|(([+-]|0[ob])?\d(_?\d)*))$/;
+var FLOAT_REGEX = /^[+-]?\d(_?\d)*(\.\d(_?\d)*)?([eE][+-]?\d(_?\d)*)?$/;
+var LEADING_ZERO = /^[+-]?0[0-9_]/;
+function parseString(ctx) {
+  let start = ctx.p;
+  let c = ctx.s.charCodeAt(ctx.p++);
+  let first = c;
+  let isLiteral = c === 39;
+  let isMultiline = c === ctx.s.charCodeAt(ctx.p) && c === ctx.s.charCodeAt(ctx.p + 1);
+  if (isMultiline) {
+    if ((c = ctx.s.charCodeAt(ctx.p += 2)) === 10)
+      ctx.p++;
+    else if (c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)
+      ctx.p += 2;
+  }
+  let parsed = "";
+  let sliceStart = ctx.p;
+  let state = 0;
+  for (; ctx.p < ctx.s.length; ctx.p++) {
+    c = ctx.s.charCodeAt(ctx.p);
+    if (isMultiline && (c === 10 || c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)) {
+      state = state && 3;
+    } else if (c < 32 && c !== 9 || c === 127) {
+      throw new TomlError("control characters are not allowed in strings", {
+        toml: ctx.s,
+        ptr: ctx.p
+      });
+    } else if ((!state || state === 3) && c === first && (!isMultiline || ctx.s.charCodeAt(ctx.p + 1) === first && ctx.s.charCodeAt(ctx.p + 2) === first)) {
+      if (isMultiline) {
+        if (ctx.s.charCodeAt(ctx.p + 3) === first)
+          ctx.p++;
+        if (ctx.s.charCodeAt(ctx.p + 3) === first)
+          ctx.p++;
+      }
+      if (!state)
+        parsed += ctx.s.slice(sliceStart, ctx.p);
+      ctx.p += isMultiline ? 3 : 1;
+      return parsed;
+    } else if (!state) {
+      if (!isLiteral && c === 92) {
+        parsed += ctx.s.slice(sliceStart, sliceStart = ctx.p);
+        state = 1;
+      }
+    } else if (state === 1) {
+      if (c === 120 || c === 117 || c === 85) {
+        let value = 0;
+        let len = c === 120 ? 2 : c === 117 ? 4 : 8;
+        for (let j = 0; j < len; j++, ctx.p++) {
+          let hex = ctx.s.charCodeAt(ctx.p + 1);
+          let digit = (
+            /* 0-9 */
+            hex >= 48 && hex <= 57 ? hex - 48 : (
+              /* A-F */
+              hex >= 65 && hex <= 70 ? hex - 65 + 10 : (
+                /* a-f */
+                hex >= 97 && hex <= 102 ? hex - 97 + 10 : -1
+              )
+            )
+          );
+          if (digit < 0)
+            throw new TomlError("invalid non-hex character in unicode escape", { toml: ctx.s, ptr: ctx.p + 1 });
+          value = value << 4 | digit;
+        }
+        if (value < 0 || value > 1114111 || value >= 55296 && value <= 57343) {
+          throw new TomlError("invalid unicode escape", { toml: ctx.s, ptr: ctx.p });
+        }
+        parsed += String.fromCodePoint(value);
+        sliceStart = ctx.p + 1;
+        state = 0;
+      } else if (c === 32 || c === 9) {
+        state = 2;
+      } else {
+        if (c === 98)
+          parsed += "\b";
+        else if (c === 116)
+          parsed += "	";
+        else if (c === 110)
+          parsed += "\n";
+        else if (c === 102)
+          parsed += "\f";
+        else if (c === 114)
+          parsed += "\r";
+        else if (c === 101)
+          parsed += "\x1B";
+        else if (c === 34)
+          parsed += '"';
+        else if (c === 92)
+          parsed += "\\";
+        else
+          throw new TomlError("unrecognized escape sequence", { toml: ctx.s, ptr: ctx.p });
+        sliceStart = ctx.p + 1;
+        state = 0;
+      }
+    } else if (c !== 32 && c !== 9) {
+      if (state === 2) {
+        throw new TomlError("invalid escape: only line-ending whitespace may be escaped", {
+          toml: ctx.s,
+          ptr: sliceStart
+        });
+      }
+      state = !isLiteral && c === 92 ? 1 : 0;
+      sliceStart = ctx.p;
+    }
+  }
+  throw new TomlError("unfinished string", { toml: ctx.s, ptr: start });
+}
+function sliceAndTrimEndOf(ctx, start, end) {
+  let value = ctx.s.slice(start, end);
+  let commentIdx = value.indexOf("#");
+  if (commentIdx > 0) {
+    skipComment({ s: value, p: commentIdx, d: 0 });
+    value = value.slice(0, commentIdx);
+  }
+  return value.trimEnd();
+}
+function parseValue(ctx, integersAsBigInt, end) {
+  let ptr = ctx.p;
+  let err = { toml: ctx.s, ptr };
+  skipUntil(ctx, 44, end);
+  let value = sliceAndTrimEndOf(ctx, ptr, ctx.p);
+  if (!value)
+    throw new TomlError("incomplete declaration: value expected", err);
+  if (value === "-inf")
+    return -Infinity;
+  if (value === "inf" || value === "+inf")
+    return Infinity;
+  if (value === "nan" || value === "+nan" || value === "-nan")
+    return NaN;
+  if (value === "-0")
+    return integersAsBigInt ? 0n : 0;
+  let isInt = INT_REGEX.test(value);
+  if (isInt || FLOAT_REGEX.test(value)) {
+    if (LEADING_ZERO.test(value)) {
+      throw new TomlError("leading zeroes are not allowed", err);
+    }
+    value = value.replace(/_/g, "");
+    let numeric = +value;
+    if (isNaN(numeric)) {
+      throw new TomlError("invalid number", err);
+    }
+    if (isInt) {
+      if ((isInt = !Number.isSafeInteger(numeric)) && !integersAsBigInt) {
+        throw new TomlError("integer value cannot be represented losslessly", err);
+      }
+      if (isInt || integersAsBigInt === true)
+        numeric = BigInt(value);
+    }
+    return numeric;
+  }
+  const date = new TomlDate(value);
+  if (!date.isValid())
+    throw new TomlError("invalid value", err);
+  return date;
+}
+
+// node_modules/smol-toml/dist/extract.js
+function extractValue(ctx, end, integersAsBigInt) {
+  let ptr = ctx.p;
+  let c = ctx.s.charCodeAt(ptr);
+  if (c === 91 || c === 123) {
+    if (!ctx.d--) {
+      throw new TomlError("document contains excessively nested structures. aborting.", {
+        toml: ctx.s,
+        ptr
+      });
+    }
+    let value = c === 91 ? parseArray(ctx, integersAsBigInt) : parseInlineTable(ctx, integersAsBigInt);
+    ctx.d++;
+    return value;
+  }
+  if (c === 34 || c === 39) {
+    return parseString(ctx);
+  }
+  if (c === 116) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 114 || ctx.s.charCodeAt(++ctx.p) !== 117 || ctx.s.charCodeAt(++ctx.p) !== 101)
+      throw new TomlError("invalid value", { toml: ctx.s, ptr });
+    ctx.p++;
+    return true;
+  }
+  if (c === 102) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 97 || ctx.s.charCodeAt(++ctx.p) !== 108 || ctx.s.charCodeAt(++ctx.p) !== 115 || ctx.s.charCodeAt(++ctx.p) !== 101)
+      throw new TomlError("invalid value", { toml: ctx.s, ptr });
+    ctx.p++;
+    return false;
+  }
+  return parseValue(ctx, integersAsBigInt, end);
+}
+
+// node_modules/smol-toml/dist/struct.js
+var KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
+function parseKey(ctx, end = "=") {
+  let start = ctx.p;
+  let dot = start - 1;
+  let parsed = [];
+  let endPtr = ctx.s.indexOf(end, start);
+  if (endPtr < 0) {
+    throw new TomlError("incomplete key-value: cannot find end of key", {
+      toml: ctx.s,
+      ptr: start
+    });
+  }
+  do {
+    let c = ctx.s.charCodeAt(ctx.p = ++dot);
+    if (c !== 32 && c !== 9) {
+      if (c === 34 || c === 39) {
+        if (c === ctx.s.charCodeAt(ctx.p + 1) && c === ctx.s.charCodeAt(ctx.p + 2)) {
+          throw new TomlError("multiline strings are not allowed in keys", {
+            toml: ctx.s,
+            ptr: ctx.p
+          });
+        }
+        let part = parseString(ctx);
+        dot = ctx.s.indexOf(".", ctx.p);
+        let strEnd = ctx.s.slice(ctx.p, dot < 0 || dot > endPtr ? endPtr : dot);
+        let newLine = indexOfNewline(strEnd);
+        if (newLine > -1) {
+          throw new TomlError("newlines are not allowed in keys", {
+            toml: ctx.s,
+            ptr: newLine
+          });
+        }
+        if (strEnd.trimStart()) {
+          throw new TomlError("found extra tokens after the string part", {
+            toml: ctx.s,
+            ptr: ctx.p
+          });
+        }
+        if (endPtr < ctx.p) {
+          endPtr = ctx.s.indexOf(end, ctx.p);
+          if (endPtr < 0) {
+            throw new TomlError("incomplete key-value: cannot find end of key", {
+              toml: ctx.s,
+              ptr: start
+            });
+          }
+        }
+        parsed.push(part);
+      } else {
+        dot = ctx.s.indexOf(".", ctx.p);
+        let part = ctx.s.slice(ctx.p, dot < 0 || dot > endPtr ? endPtr : dot);
+        if (!KEY_PART_RE.test(part)) {
+          throw new TomlError("only letter, numbers, dashes and underscores are allowed in keys", {
+            toml: ctx.s,
+            ptr: ctx.p
+          });
+        }
+        parsed.push(part.trimEnd());
+      }
+    }
+  } while (dot + 1 && dot < endPtr);
+  ctx.p = endPtr + 1;
+  skipVoid(ctx, true, true);
+  return parsed;
+}
+function parseInlineTable(ctx, integersAsBigInt) {
+  let res = {};
+  let seen = /* @__PURE__ */ new Set();
+  let c;
+  ctx.p++;
+  while (ctx.p < ctx.s.length) {
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p)) === 125) {
+      ctx.p++;
+      return res;
+    }
+    let k;
+    let t = res;
+    let hasOwn = false;
+    let p = ctx.p;
+    let key = parseKey(ctx);
+    for (let i = 0; i < key.length; i++) {
+      if (i)
+        t = hasOwn ? t[k] : t[k] = {};
+      k = key[i];
+      if ((hasOwn = Object.hasOwn(t, k)) && (typeof t[k] !== "object" || seen.has(t[k]))) {
+        throw new TomlError("trying to redefine an already defined value", {
+          toml: ctx.s,
+          ptr: p
+        });
+      }
+      if (!hasOwn && k === "__proto__") {
+        Object.defineProperty(t, k, { enumerable: true, configurable: true, writable: true });
+      }
+    }
+    if (hasOwn) {
+      throw new TomlError("trying to redefine an already defined value", {
+        toml: ctx.s,
+        ptr: ctx.p
+      });
+    }
+    let value = extractValue(ctx, 125, integersAsBigInt);
+    seen.add(t[k] = value);
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p++)) === 125) {
+      return res;
+    }
+    if (c !== 44) {
+      throw new TomlError("expected comma or end of structure", { toml: ctx.s, ptr: ctx.p - 1 });
+    }
+  }
+  throw new TomlError("unfinished table encountered", {
+    toml: ctx.s,
+    ptr: ctx.p
+  });
+}
+function parseArray(ctx, integersAsBigInt) {
+  let res = [];
+  let c;
+  ctx.p++;
+  while (ctx.p < ctx.s.length) {
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p)) === 93) {
+      ctx.p++;
+      return res;
+    }
+    res.push(extractValue(ctx, 93, integersAsBigInt));
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p++)) === 93) {
+      return res;
+    }
+    if (c !== 44) {
+      throw new TomlError("expected comma or end of structure", { toml: ctx.s, ptr: ctx.p - 1 });
+    }
+  }
+  throw new TomlError("unfinished array encountered", {
+    toml: ctx.s,
+    ptr: ctx.p
+  });
+}
+
+// node_modules/smol-toml/dist/parse.js
+function peekTable(key, table, meta, type) {
+  let t = table;
+  let m = meta;
+  let k;
+  let hasOwn = false;
+  let state;
+  for (let i = 0; i < key.length; i++) {
+    if (i) {
+      t = hasOwn ? t[k] : t[k] = {};
+      m = (state = m[k]).c;
+      if (type === 0 && (state.t === 1 || state.t === 2)) {
+        return null;
+      }
+      if (state.t === 2) {
+        let l = t.length - 1;
+        t = t[l];
+        m = m[l].c;
+      }
+    }
+    k = key[i];
+    if ((hasOwn = Object.hasOwn(t, k)) && m[k]?.t === 0 && m[k]?.d) {
+      return null;
+    }
+    if (!hasOwn) {
+      if (k === "__proto__") {
+        Object.defineProperty(t, k, { enumerable: true, configurable: true, writable: true });
+        Object.defineProperty(m, k, { enumerable: true, configurable: true, writable: true });
+      }
+      m[k] = {
+        t: i < key.length - 1 && type === 2 ? 3 : type,
+        d: false,
+        i: 0,
+        c: {}
+      };
+    }
+  }
+  state = m[k];
+  if (state.t !== type && !(type === 1 && state.t === 3)) {
+    return null;
+  }
+  if (type === 2) {
+    if (!state.d) {
+      state.d = true;
+      t[k] = [];
+    }
+    t[k].push(t = {});
+    state.c[state.i++] = state = { t: 1, d: false, i: 0, c: {} };
+  }
+  if (state.d) {
+    return null;
+  }
+  state.d = true;
+  if (type === 1) {
+    t = hasOwn ? t[k] : t[k] = {};
+  } else if (type === 0 && hasOwn) {
+    return null;
+  }
+  return [k, t, state.c];
+}
+function parse(toml, { maxDepth = 1e3, integersAsBigInt } = {}) {
+  let ctx = { s: toml, p: 0, d: maxDepth };
+  let res = {};
+  let meta = {};
+  let tmp;
+  let tbl = res;
+  let m = meta;
+  skipVoid(ctx);
+  while (ctx.p < toml.length) {
+    if (toml.charCodeAt(ctx.p) === 91) {
+      let isTableArray = toml.charCodeAt(++ctx.p) === 91;
+      tmp = ctx.p += +isTableArray;
+      let k = parseKey(ctx, "]");
+      if (isTableArray) {
+        if (toml.charCodeAt(ctx.p - 1) !== 93) {
+          throw new TomlError("expected end of table declaration", {
+            toml,
+            ptr: ctx.p - 1
+          });
+        }
+        ctx.p++;
+      }
+      let p = peekTable(
+        k,
+        res,
+        meta,
+        isTableArray ? 2 : 1
+        /* Type.EXPLICIT */
+      );
+      if (!p) {
+        throw new TomlError("trying to redefine an already defined table or value", {
+          toml,
+          ptr: tmp
+        });
+      }
+      m = p[2];
+      tbl = p[1];
+    } else {
+      tmp = ctx.p;
+      let k = parseKey(ctx);
+      let p = peekTable(
+        k,
+        tbl,
+        m,
+        0
+        /* Type.DOTTED */
+      );
+      if (!p) {
+        throw new TomlError("trying to redefine an already defined table or value", {
+          toml,
+          ptr: tmp
+        });
+      }
+      p[1][p[0]] = extractValue(ctx, void 0, integersAsBigInt);
+    }
+    skipVoid(ctx, true);
+    if (ctx.p < toml.length && (tmp = toml.charCodeAt(ctx.p)) !== 10 && tmp !== 13) {
+      throw new TomlError("each key-value declaration must be followed by an end-of-line", {
+        toml,
+        ptr: ctx.p
+      });
+    }
+    skipVoid(ctx);
+  }
+  return res;
+}
+
+// src/additive-preferences.mjs
+var owned = /* @__PURE__ */ new Set(["model", "model_reasoning_effort"]);
+var protectedKeys = /* @__PURE__ */ new Set(["model_provider", "model_catalog_json"]);
+function segments(key) {
+  if (typeof key !== "string" || /[\r\n]/.test(key)) throw new Error("Invalid config key path.");
+  let node;
+  try {
+    node = parse(`${key} = 1`);
+  } catch {
+    throw new Error("Invalid config key path.");
+  }
+  const parts = [];
+  while (node && typeof node === "object") {
+    const entries = Object.entries(node);
+    if (entries.length !== 1) throw new Error("Invalid config key path.");
+    parts.push(entries[0][0]);
+    node = entries[0][1];
+  }
+  if (node !== 1) throw new Error("Invalid config key path.");
+  return parts;
+}
+var canonical = (parts) => parts.map((p) => /^[\w-]+$/.test(p) ? p : JSON.stringify(p)).join(".");
+function classify(key) {
+  const parts = segments(key);
+  const field = parts[0] === "profiles" && parts.length >= 3 ? parts[2] : parts[0];
+  const leaf = parts.length === 1 || parts[0] === "profiles" && parts.length === 3;
+  if (protectedKeys.has(field)) return { kind: "protected" };
+  if (owned.has(field)) {
+    if (!leaf) throw new Error("Model preferences must be scalar config keys.");
+    return { kind: "preference", parts, key: canonical(parts), field };
+  }
+  if (parts[0] === "profiles" && parts.length < 3) return { kind: "protected" };
+  return { kind: "other" };
+}
+function validValue(value) {
+  return value === null || typeof value === "string" && value.trim().length > 0 && value.length <= 512 && !/[\x00-\x1f]/.test(value);
+}
+function assignPath(object, parts, value) {
+  let node = object;
+  for (const part of parts.slice(0, -1)) {
+    const next = Object.hasOwn(node, part) ? node[part] : null;
+    Object.defineProperty(node, part, { value: next && typeof next === "object" ? next : {}, enumerable: true, writable: true, configurable: true });
+    node = node[part];
+  }
+  Object.defineProperty(node, parts.at(-1), { value, enumerable: true, writable: true, configurable: true });
+}
+var ordered = (object) => Object.fromEntries(Object.entries(object).sort(([a], [b]) => a.localeCompare(b)));
+var serialize = (values, routes) => JSON.stringify({ schemaVersion: 1, values: ordered(values), routes: ordered(routes) }) + "\n";
+var versionOf = (values, routes) => `muse-preferences:${createHash("sha256").update(serialize(values, routes)).digest("hex")}`;
+var AdditivePreferences = class {
+  constructor(path) {
+    this.path = resolve(path);
+    this.values = {};
+    this.routes = {};
+    this.writes = Promise.resolve();
+  }
+  get version() {
+    return versionOf(this.values, this.routes);
+  }
+  get hasValues() {
+    return Object.keys(this.values).length > 0;
+  }
+  async load() {
+    try {
+      const saved = JSON.parse(await readFile2(this.path, "utf8"));
+      if (saved.schemaVersion !== 1 || !saved.values || typeof saved.values !== "object" || Array.isArray(saved.values)) throw new Error("invalid");
+      for (const [key, value] of Object.entries(saved.values)) {
+        const info = classify(key);
+        if (info.kind !== "preference" || info.key !== key || value === null || !validValue(value)) throw new Error("invalid");
+      }
+      if (!saved.routes || typeof saved.routes !== "object" || Array.isArray(saved.routes)) throw new Error("invalid");
+      const routes = {};
+      for (const [key, route] of Object.entries(saved.routes)) {
+        if (classify(key).field !== "model" || !route || typeof route.muse !== "boolean" || !validValue(route.model) || route.model === null || saved.values[key] !== (route.muse ? `muse/${route.model}` : route.model)) throw new Error("invalid");
+        routes[key] = { muse: route.muse, model: route.model };
+      }
+      if (Object.keys(saved.values).some((key) => classify(key).field === "model" && !Object.hasOwn(routes, key))) throw new Error("invalid");
+      this.values = saved.values;
+      this.routes = routes;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw new Error("Cannot read additive model preferences. No provider fallback was attempted.");
+    }
+  }
+  project(result) {
+    if (!this.hasValues) return result;
+    const projected = structuredClone(result), overlay = {};
+    const metadata = { name: { type: "sessionFlags" }, version: this.version };
+    for (const [key, value] of Object.entries(this.values)) {
+      const { parts } = classify(key);
+      assignPath(projected.config, parts, value);
+      assignPath(overlay, parts, value);
+      projected.origins[key] = metadata;
+    }
+    if (Array.isArray(projected.layers)) projected.layers.push({ ...metadata, config: overlay });
+    return projected;
+  }
+  selection(result) {
+    const config = this.project(result).config;
+    const profile = config.profile != null && Object.hasOwn(config.profiles || {}, config.profile) ? config.profiles[config.profile] : null;
+    const key = profile?.model != null ? canonical(["profiles", config.profile, "model"]) : "model";
+    return { config: { ...config, ...Object.fromEntries(Object.entries(profile || {}).filter(([, v]) => v != null)) }, route: this.routes[key] };
+  }
+  async dispatch(method, params, { readConfig: readConfig2, forward, validateModel }) {
+    const edits = method === "config/value/write" ? [params] : params.edits;
+    if (!Array.isArray(edits)) throw new Error("Config edits must be an array.");
+    const info = edits.map((edit) => classify(edit.keyPath));
+    if (info.some((i) => i.kind === "protected")) throw new Error("Global provider/catalog and whole-profile replacement are not supported by the additive bridge. Select a model in the picker.");
+    if (!info.some((i) => i.kind === "preference")) {
+      if (params.filePath === this.path || params.expectedVersion?.startsWith("muse-preferences:")) throw new Error("The additive preference file accepts only model and reasoning settings.");
+      return forward(method, params);
+    }
+    if (info.some((i) => i.kind !== "preference")) throw new Error("Save model preferences separately from other config settings. No edits were applied.");
+    const write = async () => {
+      if (params.expectedVersion != null && params.expectedVersion !== this.version) throw new Error("Additive model preferences changed or use a different config version. Read config again before saving.");
+      if (params.filePath != null && resolve(params.filePath) !== this.path) {
+        const host = await readConfig2({ includeLayers: true });
+        if (!host.layers?.some((l) => l.name.type === "user" && resolve(l.name.file) === resolve(params.filePath))) throw new Error("Additive model preferences support the user default or bridge preference file, not project config files.");
+      }
+      const values = { ...this.values }, routes = { ...this.routes };
+      for (let i = 0; i < edits.length; i++) {
+        const edit = edits[i], entry = info[i];
+        if (!["replace", "upsert"].includes(edit.mergeStrategy) || !validValue(edit.value)) throw new Error("Invalid model preference value or merge strategy.");
+        if (entry.field === "model") {
+          if (edit.value === null) delete routes[entry.key];
+          else {
+            const route = await validateModel(edit.value);
+            routes[entry.key] = { muse: route.muse, model: route.model };
+          }
+        }
+        if (edit.value === null) delete values[entry.key];
+        else values[entry.key] = edit.value;
+      }
+      await mkdir2(dirname2(this.path), { recursive: true, mode: 448 });
+      const temp = `${this.path}.${randomUUID5()}.tmp`;
+      try {
+        await writeFile3(temp, serialize(values, routes), { flag: "wx", mode: 384 });
+        await rename2(temp, this.path);
+      } finally {
+        await unlink2(temp).catch(() => {
+        });
+      }
+      this.values = values;
+      this.routes = routes;
+      return { status: "ok", filePath: this.path, version: this.version };
+    };
+    const pending = this.writes.then(write);
+    this.writes = pending.catch(() => {
+    });
+    return pending;
+  }
+};
+
 // src/additive-runtime.mjs
 async function createAdditiveRuntime({
   executable,
@@ -1193,8 +2027,8 @@ async function createAdditiveRuntime({
 } = {}) {
   if (!executable || !stateRoot || !emit) throw new Error("An explicit real Codex executable, state directory, and output handler are required.");
   assertStdio(args);
-  stateRoot = resolve(stateRoot);
-  await mkdir2(stateRoot, { recursive: true, mode: 448 });
+  stateRoot = resolve2(stateRoot);
+  await mkdir3(stateRoot, { recursive: true, mode: 448 });
   let lock;
   try {
     lock = await open(join4(stateRoot, "runtime.lock"), "wx", 384);
@@ -1225,19 +2059,21 @@ async function createAdditiveRuntime({
         return catalog.ids();
       }
     });
-    await new Promise((resolve2, reject) => {
+    await new Promise((resolve3, reject) => {
       server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve2);
+      server.listen(0, "127.0.0.1", resolve3);
     });
     const port = server.address().port;
     const store = new RouteStore(join4(stateRoot, "routes.json"));
     await store.load();
+    const preferences = new AdditivePreferences(join4(stateRoot, "preferences.json"));
+    await preferences.load();
     const coordinator = new CodexProcess(executable, args, { env, cwd });
-    router = new AdditiveRouter({ coordinator, catalog, store, emit, hostProvider, createWorker: async (route) => {
+    router = new AdditiveRouter({ coordinator, catalog, store, preferences, emit, hostProvider, createWorker: async (route) => {
       let extra = [];
       if (route.muse) {
-        const catalogPath = join4(dir, `${randomUUID5()}.json`);
-        await writeFile3(catalogPath, JSON.stringify(makeCatalog(catalog.ids())), { mode: 384 });
+        const catalogPath = join4(dir, `${randomUUID6()}.json`);
+        await writeFile4(catalogPath, JSON.stringify(makeCatalog(catalog.ids())), { mode: 384 });
         extra = [
           "-c",
           `model_provider=${JSON.stringify(museProvider)}`,
@@ -1262,7 +2098,7 @@ async function createAdditiveRuntime({
       } finally {
         await rm2(dir, { recursive: true, force: true });
         await lock.close();
-        await unlink2(join4(stateRoot, "runtime.lock"));
+        await unlink3(join4(stateRoot, "runtime.lock"));
       }
     } };
   } catch (error) {
@@ -1270,7 +2106,7 @@ async function createAdditiveRuntime({
     if (server?.listening) await server.stop();
     await rm2(dir, { recursive: true, force: true });
     await lock.close();
-    await unlink2(join4(stateRoot, "runtime.lock"));
+    await unlink3(join4(stateRoot, "runtime.lock"));
     throw error;
   }
 }
@@ -1344,3 +2180,42 @@ try {
   console.error(error.message);
   process.exitCode = 1;
 }
+/*! Bundled license information:
+
+smol-toml/dist/date.js:
+smol-toml/dist/error.js:
+smol-toml/dist/util.js:
+smol-toml/dist/primitive.js:
+smol-toml/dist/extract.js:
+smol-toml/dist/struct.js:
+smol-toml/dist/parse.js:
+smol-toml/dist/stringify.js:
+smol-toml/dist/index.js:
+  (*!
+   * Copyright (c) Squirrel Chat et al., All rights reserved.
+   * SPDX-License-Identifier: BSD-3-Clause
+   *
+   * Redistribution and use in source and binary forms, with or without
+   * modification, are permitted provided that the following conditions are met:
+   *
+   * 1. Redistributions of source code must retain the above copyright notice, this
+   *    list of conditions and the following disclaimer.
+   * 2. Redistributions in binary form must reproduce the above copyright notice,
+   *    this list of conditions and the following disclaimer in the
+   *    documentation and/or other materials provided with the distribution.
+   * 3. Neither the name of the copyright holder nor the names of its contributors
+   *    may be used to endorse or promote products derived from this software without
+   *    specific prior written permission.
+   *
+   * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+   * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+   * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+   * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+   * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+   * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+   * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+   * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+   * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   *)
+*/

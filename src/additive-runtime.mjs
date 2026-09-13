@@ -10,6 +10,7 @@ import { makeCatalog } from './native-catalog.mjs';
 import { readConnection } from './auth.mjs';
 import { runMuse } from './native-runner.mjs';
 import { assertStdio } from './additive-cli.mjs';
+import { AdditivePreferences } from './additive-preferences.mjs';
 
 export async function createAdditiveRuntime({ executable, args = ['app-server'], env = process.env, stateRoot,
   emit, discover, connection, runner, hostProvider = 'openai', intervalMs = 300000, cwd } = {}) {
@@ -37,8 +38,9 @@ export async function createAdditiveRuntime({ executable, args = ['app-server'],
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
     const port = server.address().port;
     const store = new RouteStore(join(stateRoot, 'routes.json')); await store.load();
+    const preferences = new AdditivePreferences(join(stateRoot, 'preferences.json')); await preferences.load();
     const coordinator = new CodexProcess(executable, args, { env, cwd });
-    router = new AdditiveRouter({ coordinator, catalog, store, emit, hostProvider, createWorker: async route => {
+    router = new AdditiveRouter({ coordinator, catalog, store, preferences, emit, hostProvider, createWorker: async route => {
       let extra = [];
       if (route.muse) {
         const catalogPath = join(dir, `${randomUUID()}.json`);
