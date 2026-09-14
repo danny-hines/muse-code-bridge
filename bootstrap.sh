@@ -34,7 +34,8 @@ main() {
       --help|-h)
         printf '%s\n' 'Usage: bootstrap.sh [--host codex|hermes|opencode] [--login | --no-login]' \
           'Repeat --host for several apps. Defaults to codex.' \
-          'Installs Muse MCP tools and skills. The experimental combined model picker uses a separate macOS launcher; see docs/setup.md.' \
+          'Installs Muse MCP tools and skills. The experimental ChatGPT + Muse companion app is installed separately; see docs/setup.md.' \
+          'Hermes and OpenCode are works in progress and currently untested in those hosts.' \
           'Fetch Muse Code Bridge; install missing Node.js and Muse Code locally.' \
           'Only the Codex integration installs the Codex CLI. Host desktop apps must already be installed.' \
           'Existing compatible tools are reused. No sudo or shell-profile edits.' \
@@ -190,8 +191,9 @@ main() {
   echo "Local source: $root/repo"
   echo 'Setup finished. Restart the selected host and start a new local conversation. Ask Muse to review your project.'
   if [[ "$wants_codex" = true && "$os" = darwin ]]; then
-    echo 'For the experimental combined OpenAI/Muse picker, fully quit the desktop app and run:'
-    printf '  %q\n' "$root/repo/scripts/launch-additive-macos.sh"
+    echo 'To install the experimental ChatGPT + Muse companion shortcut alongside the original icon, run:'
+    printf '  MUSE_BRIDGE_ROOT=%q MUSE_BRIDGE_EXECUTABLE=%q %q %q --dock\n' "$root" "$root/runtime/bin/muse" "$root/runtime/bin/node" "$root/repo/scripts/install-shared-macos.mjs"
+    echo 'Then fully quit ChatGPT and open ChatGPT + Muse. Native version checks apply; actual mobile Remote behavior remains unverified.'
   fi
 }
 

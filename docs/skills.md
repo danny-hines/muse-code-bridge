@@ -2,6 +2,8 @@
 
 Skills guide the responsibility split using the host's selected model and the shared Muse MCP connection. They do not change the model picker, reasoning settings, authentication mode, or enforce a token budget.
 
+**Hermes and OpenCode integrations are works in progress and currently untested in those hosts.** Their installation/discovery details below describe the intended wiring. Configuration and MCP-client checks do not establish that the real host discovers or follows these skills, handles approvals, or completes tasks correctly.
+
 | Skill | Muse does | Host does | Example |
 |---|---|---|---|
 | `muse-implement` | Implementation, appropriate tests, routine corrections | Scope, consequential design decisions, final verification | “Use muse-implement to add this feature. Prioritize conserving host usage.” |
@@ -18,7 +20,7 @@ Codex gets the complete collection inside the existing plugin:
 ./install.sh --host codex
 ```
 
-Hermes and OpenCode can install the whole collection or select workflows:
+The work-in-progress Hermes and OpenCode installers can install the whole collection or select workflows:
 
 ```sh
 ./install.sh --list-skills
@@ -39,7 +41,7 @@ Omitting `--skills` preserves each Hermes/OpenCode installation's previous selec
 
 ## Discovery in each host
 
-| Host | Installed location | Invocation |
+| Host | Installed location | Invocation (Hermes/OpenCode untested) |
 |---|---|---|
 | Codex | The plugin's `skills/` directory in the Codex plugin cache | Enable Muse Code Bridge; mention `muse-implement` in the skill picker or ask to use it by name. |
 | OpenCode 1 and 2 | `~/.config/opencode/skills/`, respecting `XDG_CONFIG_HOME` | Ask to use `muse-implement`; the agent loads it with its native skill tool. Skill permissions can affect discovery. |

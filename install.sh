@@ -27,6 +27,7 @@ Usage: ./install.sh [--host codex|hermes|opencode] [--check] [--login]
                     [--api-key-file /absolute/private/key-file]
                     [--skills all|core|none|implement,review] [--list-skills]
 Repeat --host to configure several apps. Default: codex.
+Hermes and OpenCode are works in progress and currently untested in those hosts.
 Requires Node.js 22+ and Muse Code 1.0.3+; Codex also requires the Codex CLI.
 --check validates prerequisites and configuration without changing settings.
 --login opens the official Muse browser login.

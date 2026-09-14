@@ -9,7 +9,8 @@ case "${1:-}" in
     cat <<'HELP'
 Usage: launch-additive-macos.sh [--check]
 Launch Codex / ChatGPT desktop with both OpenAI and Muse model options.
-Experimental macOS integration. Fully quit the app before launching.
+Older local-only worker prototype. Fully quit the app before launching.
+For the shared-gateway Dock shortcut, see docs/shared-gateway-design.md.
 --check validates local prerequisites without launching or changing settings.
 Bootstrap's private Node and Muse tools are discovered automatically.
 Overrides: MUSE_ADDITIVE_APP_PATH, MUSE_BRIDGE_ROOT, MUSE_BRIDGE_NODE_BIN,

@@ -1,49 +1,42 @@
-# Muse Code subscription, API access, and OpenCode's free model
+# Muse Code subscription, API access, and OpenCode Zen
 
-Checked **September 8, 2026**. Availability, models, and prices can change.
+Bridge status and OpenCode Zen's published offering reviewed **September 13, 2026**. Prices, availability and provider terms can change; use the linked provider pages when choosing access. **The bridge integrations for Hermes and OpenCode are works in progress and currently untested in those hosts.**
 
 ## Choose by the experience you want
 
 | Route | Agent doing the work | Access and billing | This bridge needed? |
 |---|---|---|---|
-| OpenCode Zen: Muse Spark Contributor Free | OpenCode, using Muse Spark as its model | Zen's current free offer; does not use your Muse Code subscription | No |
-| Bridge: Muse-managed account | Muse Code, called by Codex, Hermes, or OpenCode | Muse's stored credentials; subscription applies when its onboarding credential and plan are active | Yes |
-| Bridge: explicit API key | Muse Code, called by the host | Your additional Meta API key, billed per token | Yes |
+| Codex MCP collaborator | Muse Code works alongside the selected Codex model | Bridge's configured Muse account or explicit API key | Yes |
+| ChatGPT + Muse picker | Codex executes tools requested by the selected model | Native OpenAI auth or bridge Muse auth, selected by model ID | Yes; experimental companion app |
+| OpenCode Zen | OpenCode uses its selected Zen model | Zen's own access, billing and data-use terms | No |
 | Native model API provider | The host's own agent | Its configured API provider and key | No; separate provider configuration |
 
-For **Codex plus your Muse Code subscription**, the MCP bridge lets Codex collect browser evidence, ask Muse for another approach, then test the result and continue the same Muse conversation. The host keeps its selected model. The separate [experimental combined picker on macOS](setup.md#select-muse-directly-in-codex--chatgpt-desktop-macos-experimental) lets you select Muse as the primary model alongside OpenAI options, with text/tool handoffs and current compatibility limits.
+The [companion shortcut](shared-gateway-design.md) supports Muse text/tool handoffs alongside OpenAI in the desktop picker. OpenAI inference also passes through the local gateway in that launch. The original ChatGPT icon remains available; mobile behavior and broader compatibility still need verification.
 
-For **Muse Spark as OpenCode's main model**, try the existing Zen route first. The bridge adds the Muse Code agent alongside OpenCode, with Muse's own sessions, tools, and approvals. These are different agent setups; a shared model family does not imply identical behavior. Native adapters for OpenCode and Hermes are not implemented. See [OpenCode custom providers](https://opencode.ai/docs/providers/#custom-provider) and [Hermes provider configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration/) for their separate interfaces.
+Hermes/OpenCode MCP setup is intended to add Muse Code as another agent, with its own sessions and approvals. Native primary-model adapters for those hosts are not implemented here. Shared model names do not imply identical agent behavior or billing.
 
-## What is free in OpenCode today?
+## OpenCode's separate free offering
 
-Zen lists **Muse Spark 1.3 Contributor Free**, with free input, output, and cached reads. Its OpenCode model identifier is `opencode/muse-spark-1.3-contributor-free`. OpenCode describes this as a limited-time offer; no permanent free entitlement is implied. Follow Zen's connection instructions and choose that exact model from the model list. [OpenCode Zen](https://opencode.ai/docs/zen/).
+As of the review date, Zen lists **Muse Spark 1.3 Contributor Free**, model ID `opencode/muse-spark-1.3-contributor-free`, with free input, output and cached reads. OpenCode describes the offer as limited-time. Its privacy page says the Contributor offering permits prompts and completions to be used to train future Meta models. Check availability and terms before selecting it. [Zen models and pricing](https://opencode.ai/docs/zen/), [Zen privacy](https://opencode.ai/docs/zen/#privacy).
 
-This is Zen-provided model access, not a connection to your Muse Code subscription or a local Muse Code process. OpenCode's privacy section says this Contributor offering permits prompts and completions to be used for training future Meta models. The free offer should therefore not be treated as interchangeable with standard non-training API access. [Zen privacy information](https://opencode.ai/docs/zen/#privacy).
+Zen access does not use this bridge, the local Muse CLI or a Muse Code subscription. This project has not tested that OpenCode user flow. Its presence in Zen's published catalog is separate from the bridge's untested OpenCode integration.
 
-## Meta API prices
+## Explicit Meta API access
 
-USD per **one million tokens**, for the documented Spark 1.3 tiers:
+The bridge's API mode uses your additional Meta API key with the official Muse CLI. It does not choose Contributor, use OpenCode Zen, or switch billing routes after a failure. Choose an available model from `muse_status`; the configured account determines access.
 
-| Tier | Input | Output | Cached input | Prompts/completions used for Meta training? |
-|---|---:|---:|---:|---|
-| Standard | $1.25 | $4.25 | $0.15 | No, according to the tier description |
-| Contributor | $0.10 | $0.20 | $0.002 | Permission granted for training |
+For current standard/Contributor prices, cached-token rates and other charges, consult [Meta pricing and rate limits](https://dev.meta.ai/docs/pricing-rate-limits/). Review the data-use terms for the selected model and tier alongside its price.
 
-These are **Meta's direct API prices**, separate from Zen's free promotion. Contributor is inexpensive, but its data-use choice is part of the tier. Other charges can apply, such as web-search grounding. A coding conversation may make several model calls and resend context, so per-token prices are not per-task prices. [Meta pricing and rate limits](https://dev.meta.ai/docs/pricing-rate-limits/).
+API key handling is tested using synthetic credentials and processes. A paid Meta API request has not been used to validate this integration's API mode.
 
-The bridge's API mode uses your additional Meta API key with the official CLI. It does not automatically select Contributor or send traffic to OpenCode Zen. Choose a model from `muse_status`; the bridge does not substitute a cheaper model, switch providers, or retry with a different billing route.
+## Muse-managed account access
 
-## How the subscription differs
+Account mode removes an inherited `META_API_KEY` and preserves Muse's stored credentials. The official CLI owns login and entitlement. If you intend to use a Muse Code subscription, confirm the active account, credential and plan in Muse; bridge discovery alone cannot prove which plan will be charged. See [Muse authentication](https://dev.meta.ai/docs/muse-code/auth) and [subscriptions](https://dev.meta.ai/docs/muse-code/subscriptions) for the current provider rules.
 
-Meta ties Muse Code subscriptions to the credential connected automatically during CLI onboarding. It is for Muse Code only; separately created Model API keys use pay-as-you-go. Subscription use runs through the CLI while signed in to the associated account. When usage limits are reached, Meta documents waiting for reset or upgrading. [Muse Code subscriptions](https://dev.meta.ai/docs/muse-code/subscriptions).
+MCP consultations use `muse serve`; the primary-model adapter uses `muse exec`. Neither path extracts subscription tokens for use as general-purpose API keys. Use `muse_status` to inspect the selected bridge mode and discover models, then Muse's own account/usage interface for billing confirmation.
 
-That is why this project uses the official CLI: `muse serve` for MCP conversations and `muse exec` for the experimental picker adapter. It does not turn subscription credentials into general-purpose API credentials. Account mode removes an inherited `META_API_KEY`, but preserves Muse's stored credentials; Muse decides the actual entitlement. The documented credential precedence is environment key, stored key, then stored browser session. [Muse authentication](https://dev.meta.ai/docs/muse-code/auth).
-
-Use `muse_status` to check the bridge's selected authentication mode and discover models. It does not prove which plan was charged. Confirm that in Muse's own account and usage interface. Each person installs their own CLI and authenticates their own account; sharing this repository shares no subscription or credentials.
+Each person installs the CLI and authenticates their own account. Sharing this repository shares no subscription or credentials. [Authentication setup](../README.md#login-and-subscription).
 
 ## Project scope
 
-One repository keeps the Muse session implementation shared and the host installers separate. Codex gets the `muse-codex-bridge` plugin and a collaboration skill; Hermes and OpenCode get MCP configuration. Both account and API modes keep this same workflow. Setup instructions are in the [README](../README.md#login-and-subscription).
-
-The standard installation calls **Muse Code from an existing host conversation** through MCP. The experimental macOS launcher adds a primary-model adapter and Codex tool handoffs; its broader desktop-tool compatibility is still under test. There is no standalone chat UI or native Hermes/OpenCode adapter. No comparative quality benchmark between the agents has been performed.
+The Muse protocol/session code is shared across the installers. Codex has the locally tested MCP plugin and experimental macOS companion; Hermes and OpenCode have work-in-progress MCP configuration and skills that are currently untested in the actual hosts. No standalone chat UI, native Hermes/OpenCode model adapter, or comparative agent-quality benchmark is included.

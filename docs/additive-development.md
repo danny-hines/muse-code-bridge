@@ -1,8 +1,8 @@
-# Additive routing prototype
+# Older additive routing prototype (local-only)
 
 The newer [shared gateway and Dock shortcut](shared-gateway-design.md) uses one native task server for desktop and Remote. This page documents the older per-task worker implementation, which remains local-only.
 
-This is an experimental launch option, included in the repository and bootstrap source but activated separately. The standard installer configures [MCP tools and skills](setup.md). The launcher adds a local routing layer around Codex's app-server protocol; it does not change the saved OpenAI provider or replace the installed desktop application. New users should follow the [quick setup guide](setup.md).
+This older experimental launch option is included in the repository and bootstrap source but activated separately. The standard installer configures [MCP tools and skills](setup.md). This launcher adds a stdio routing layer and multiple native workers; it is not the one-server companion app. New setups should use the [quick setup guide](setup.md).
 
 ## What is implemented
 
@@ -69,7 +69,7 @@ The standard runtime cannot resume a Muse-primary task using this custom provide
 
 ## Remote loading and “open in another app”
 
-The combined picker is incompatible with ChatGPT mobile Remote. Earlier builds inherited saved Remote enrollment in every child app-server, so the coordinator and task workers competed for the same registered computer. Local diagnostics confirmed repeated HTTP 409 conflicts and token-refresh/403 failures. A mobile request could load a task directly in the coordinator or an unrelated worker; the desktop then tried to resume it in its routed worker and received `already has an active writer`. The desktop displays this as **“This is open in another app.”** It does not require another physical device to be using the task.
+The older additive picker is incompatible with ChatGPT mobile Remote. Earlier builds inherited saved Remote enrollment in every child app-server, so the coordinator and task workers competed for the same registered computer. Local diagnostics confirmed repeated HTTP 409 conflicts and token-refresh/403 failures. A mobile request could load a task directly in the coordinator or an unrelated worker; the desktop then tried to resume it in its routed worker and received `already has an active writer`. The desktop displays this as **“This is open in another app.”** It does not require another physical device to be using the task.
 
 Remote also bypasses the adapter's merged `model/list` and private provider routes, explaining why its picker does not include Muse. Disabling Remote only in task workers is insufficient: a Remote-enabled coordinator can still acquire task locks outside the router.
 
@@ -77,11 +77,11 @@ To recover:
 
 1. Let current work finish, then **fully quit the desktop app with Cmd+Q**. Closing its window or retrying a task does not stop the adapter's child processes.
 2. **Reopen the app normally**, from the Dock or Applications, to use Remote and ordinary OpenAI tasks. Reopen the affected task and reconnect from the phone. The Muse MCP plugin and skills remain installed.
-3. Use an updated combined-picker launcher only for local tasks. It suppresses Remote for all child processes without changing the saved enrollment, and explains this limitation in its launch output and setup errors.
+3. Use an updated `launch-additive-macos.sh` only for local tasks. It suppresses Remote for all child processes without changing the saved enrollment, and explains this limitation in its launch output and setup errors.
 
-Do not delete `thread-writer-locks`, task databases, or `additive/routes.json` to clear this error. A live process holds the writer lock; normal shutdown releases it while preserving history. If a normal relaunch still has the problem, check for surviving processes before taking further recovery steps. Muse-primary tasks still require the local additive launcher.
+Do not delete `thread-writer-locks`, task databases, or `additive/routes.json` to clear this error. A live process holds the writer lock; normal shutdown releases it while preserving history. If a normal relaunch still has the problem, check for surviving processes before taking further recovery steps. Tasks saved with the additive custom provider still require that local launcher.
 
-Supporting both the combined picker and Remote requires routing Remote requests through the same provider/ownership layer. This change prevents the conflicting connections; it does not implement Remote support or add Muse to the mobile picker. Regression tests exercise the environment inherited by the coordinator and both worker types, reject Remote setup before it reaches a child, and check disabled Remote status against the real bundled app-server. Phone-to-desktop recovery still requires a normal app relaunch and user verification.
+These safeguards prevent competing Remote connections only in this older worker implementation; they do not add Remote support here. The newer [shared gateway](shared-gateway-design.md) routes inference below one native task server and retains its Remote transport, but actual phone-side behavior is still unverified. Regression tests exercise the environment inherited by the coordinator and both worker types, reject Remote setup before it reaches a child, and check disabled Remote status against the real bundled app-server. Phone-to-desktop recovery still requires a normal app relaunch and user verification.
 
 ## Limits before a native release
 

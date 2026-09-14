@@ -2,16 +2,17 @@
 
 Share this page: **https://github.com/danny-hines/muse-code-bridge/blob/main/docs/setup.md**.
 
-The installer is the supported setup path. Run it yourself or ask your desktop agent to run the same script. Each person signs in to their own Muse account; the repository contains no account credentials and needs no hosted relay.
+Use the installer for the Codex / ChatGPT desktop MCP plugin, then optionally add the experimental companion shortcut. **Hermes and OpenCode integrations are works in progress and currently untested in those hosts.** Each person signs in to their own Muse account; no credentials or hosted relay are included.
 
 Choose the experience you want:
 
-| Experience | Hosts | Setup |
+| Experience | Status | Setup |
 |---|---|---|
-| Keep Astra or another host model in charge; delegate to Muse through skills/tools | Codex / ChatGPT desktop, Hermes, OpenCode | Run bootstrap, then restart the host normally |
-| Select Muse directly alongside the OpenAI models | Codex / ChatGPT desktop on macOS, experimental | Run bootstrap, then launch the app with the script below |
+| Keep the selected Codex model in charge; delegate to Muse through skills/tools | Tested locally on macOS | Bootstrap, then restart the host normally |
+| Select Muse alongside OpenAI models in ChatGPT desktop | Experimental; native/live tests passed, mobile unverified | Bootstrap, then install ChatGPT + Muse.app |
+| Use Muse through Hermes or OpenCode MCP | Work in progress; currently untested in-host | Development instructions in the host guides |
 
-Both model groups and Muse selection have now been user-tested in the macOS desktop. Automatic GUI refresh when providers publish new models and broader desktop feature compatibility remain under test. Existing OpenAI provider settings are preserved in both workflows. [Status and limits](additive-models.md).
+The companion shortcut uses a shared inference gateway and one native task server. Actual mobile Remote use, mobile picker visibility, and automatic visible catalog refresh still need verification. [Status and limits](shared-gateway-design.md#limits-and-remote-verification).
 
 ## Keep your model options and use Muse as a collaborator
 
@@ -45,56 +46,59 @@ app, enable the plugin, and invoke muse-implement or muse-review.
 
 The agent runs the same installer and can help with errors. It does not need an existing Muse skill or plugin to read these setup instructions.
 
-For Hermes or OpenCode, add `--host hermes` or `--host opencode`. Their supported integration is MCP tools and skills; their native model-provider integrations are not implemented. See the [host guides](../README.md#install) and [skill catalog](skills.md).
+For the work-in-progress Hermes or OpenCode integrations, add `--host hermes` or `--host opencode`. These configure MCP tools and skills but are currently untested in the actual hosts. Native model-provider adapters are not implemented. See the [host guides](../README.md#install) and [skill catalog](skills.md).
 
 ## Select Muse directly in Codex / ChatGPT desktop (macOS, experimental)
 
-**New: [ChatGPT + Muse Dock shortcut](shared-gateway-design.md).** The companion app uses a shared inference gateway and one native task server. The ordinary ChatGPT icon remains available, and no Terminal window is needed. Native and live model-switch tests passed; actual mobile picker visibility still needs a phone-side check. Follow that guide for the two-shortcut setup from a checkout.
+Use the **ChatGPT + Muse companion shortcut** for the combined picker. It keeps the original ChatGPT icon available and uses a ChatGPT icon with a small Meta badge for the companion. The current installer accepts only the tested native executable, `codex-cli 0.154.0-alpha.6.2`.
 
-The older script-based setup below supports **local tasks only**. Remote access from the ChatGPT mobile app is unavailable while using that additive launcher. For Remote, fully quit it and reopen the desktop app normally; the Muse MCP plugin and skills remain available. The launcher does not change saved Remote enrollment. See [recovery for mobile loading and task locks](additive-development.md#remote-loading-and-open-in-another-app).
-
-Run the bootstrap above first. It includes the compiled adapter and launcher, so no Git clone, npm build, or separate service installation is needed. If you already installed the bridge, use the update command below to fetch the current launcher.
-
-After setup and Muse login, **fully quit Codex / ChatGPT desktop with Cmd+Q**. Then run:
+After the bootstrap and Muse sign-in above, install the shortcut using bootstrap's private executables:
 
 ```sh
-"$HOME/.local/share/muse-bridge/repo/scripts/launch-additive-macos.sh"
+bridge_root="${MUSE_BRIDGE_ROOT:-$HOME/.local/share/muse-bridge}"
+MUSE_BRIDGE_EXECUTABLE="$bridge_root/runtime/bin/muse" \
+  "$bridge_root/runtime/bin/node" \
+  "$bridge_root/repo/scripts/install-shared-macos.mjs" --dock
 ```
 
-Keep that terminal open while using the app. Start a new local chat and select a Muse model from the normal model picker. Your OpenAI models remain available there too. No skill invocation is required: the selected Muse model handles the chat and can request Codex tool calls. To change providers in an existing chat, finish or interrupt the current turn before selecting another model.
+For an unmodified Git checkout with Node.js 22+ and Muse on your PATH, run `node scripts/install-shared-macos.mjs --dock` from the checkout instead. Committed bundles and icons are included; source changes require a build first. The installer does not launch or quit ChatGPT. [Full installation details and overrides](shared-gateway-design.md#install-and-use).
 
-**Use this launcher each time you want both catalogs.** Opening the app normally uses the standard Codex runtime. The separate launcher does not change your Dock shortcut or install a background login service. Its model and reasoning preferences survive launcher restarts in a private bridge file; existing chats keep their own provider choices.
+**Fully quit ChatGPT with Cmd+Q, then open ChatGPT + Muse.** No Terminal window needs to stay open. Select a Muse model from the picker; no Muse skill invocation is required. The selected model can request Codex tools, which Codex executes using its normal approvals. Let a turn finish or interrupt it before switching models.
 
-The launcher finds bootstrap's private Node and Muse executables automatically. The desktop app itself must already be installed at `/Applications/ChatGPT.app`; set `MUSE_ADDITIVE_APP_PATH` if it is elsewhere. For a Git clone, use `./scripts/launch-additive-macos.sh` from that checkout. For a custom bootstrap root, use that root's `repo/scripts/launch-additive-macos.sh`; it detects the managed root automatically.
+The normal ChatGPT icon starts the standard runtime. The companion starts the same installed app with a process-scoped gateway URL; it does not replace global provider settings. OpenAI inference also passes through this gateway during that launch, adding a local dependency. Desktop model/effort defaults are private to the bridge; mobile settings writes retain native persistence. Read the [gateway tradeoffs and Remote limits](shared-gateway-design.md#limits-and-remote-verification).
 
-Optional local prerequisite check, which can run while the app is open:
+To check the installed shortcut without launching it:
 
 ```sh
-"$HOME/.local/share/muse-bridge/repo/scripts/launch-additive-macos.sh" --check
+"$HOME/Applications/ChatGPT + Muse.app/Contents/MacOS/muse-launch" --check
 ```
 
-This checks the local app and executables. It does not make a model request or establish account/subscription access. Muse currently supports text and tool handoffs through the adapter; image/audio/file inputs and full browser/connector compatibility are not established. See [current limits](additive-development.md#limits-before-a-native-release).
+This validates local files and the tested native version. It does not make a model request, verify billing, or test Remote. Muse accepts text and Codex tool handoffs; images/audio/file inputs, native compaction, and full browser/connector compatibility are not supported or verified as detailed in the gateway guide.
 
 ### Ask an agent to set up the combined picker
 
 ```text
-Set up the experimental combined OpenAI/Muse model picker for my macOS
-Codex / ChatGPT desktop app. Follow
-https://github.com/danny-hines/muse-code-bridge/blob/main/docs/setup.md
-Use the standard account-mode bootstrap with --auth account --login, then
-run the launcher's --check. Let me complete Muse's official sign-in.
-Preserve my existing OpenAI provider and catalog. Give me the exact launcher
-command and tell me when to quit the app before running it. If this task runs
-inside that app, do not terminate it while the task is still running.
+Install the experimental ChatGPT + Muse companion app for my macOS desktop.
+Follow https://github.com/danny-hines/muse-code-bridge/blob/main/docs/setup.md.
+Use the account-mode bootstrap and let me complete Muse's official sign-in.
+Install the shared-gateway shortcut alongside the original ChatGPT icon,
+then run its --check. Preserve my native provider configuration and history.
+Use the tested native version; do not bypass its compatibility check.
+Tell me when to quit ChatGPT and switch icons. If this task runs inside
+ChatGPT, leave it running until the setup work is finished.
 ```
-
-The retired `--native`, `--replace-provider`, and direct `enable` commands remain disabled. They belong to the old provider-replacement experiment and are not steps in this setup.
 
 ### Return to the standard app or remove the bridge
 
-Fully quit the app, then reopen it normally to return to the standard runtime. To resume a Muse-primary chat, reopen through the launcher. Keep `additive/routes.json` while retaining those chats; deleting routing metadata prevents implicit Muse resume. The ordinary app cannot resume the custom Muse provider by itself.
+Fully quit ChatGPT, then open the original icon to bypass the gateway. A task saved with Muse, or a Muse default saved remotely, may need an OpenAI selection to continue in the standard runtime; its history remains intact. An ordinary launch may briefly show cached Muse names until native model discovery refreshes.
 
-Removing the MCP plugin is a separate step, covered in the [Codex guide](../integrations/codex/README.md#update-and-remove). You can retain the private preferences and routes for future use. Source/runtime files are shared with any Hermes or OpenCode installations, so remove them only after those integrations are removed too.
+To remove the companion, quit the app and remove `~/Applications/ChatGPT + Muse.app` and its Dock tile. Optional removal of its private payload and preferences is documented in the [gateway guide](shared-gateway-design.md#updates-and-removal). Removing the MCP plugin is a separate operation in the [Codex guide](../integrations/codex/README.md#update-and-remove). Do not remove shared source/runtime files while another host still uses them.
+
+### Older launcher and provider-replacement installs
+
+`scripts/launch-additive-macos.sh` is the **older local-only development launcher**, not the companion app. It requires its Terminal to stay open and disables Remote in all child servers. Its Muse tasks retain separate routing metadata in `additive/routes.json`; keep that metadata and follow its [legacy task and Remote recovery instructions](additive-development.md). The shared launcher does not automatically migrate those provider routes.
+
+The retired `--native`, `--replace-provider`, and direct `enable` commands remain disabled. They are not setup steps for either current mode.
 
 ## Restore missing Astra/OpenAI model options
 
@@ -110,7 +114,7 @@ Installing or updating the collaborator plugin does not automatically disable pr
 
 ## Subscription or API
 
-Account mode uses the official Muse CLI's saved credentials. Confirm Muse is using the credential connected during subscription onboarding. Stored API keys can take precedence over browser login, so successful setup alone cannot verify subscription billing. The bridge never extracts or shares subscription tokens. Each user needs their own eligible Muse access.
+Account mode uses the official Muse CLI's saved credentials and removes an inherited `META_API_KEY` from the Muse child process. Confirm the active account and plan in Muse; successful setup alone cannot verify subscription billing. The bridge never extracts or shares subscription tokens. Each user needs their own eligible Muse access.
 
 For explicit pay-as-you-go API access, save your own additional Meta Model API key in a private file outside the repository, set its permissions to `600`, and use:
 
@@ -131,8 +135,10 @@ curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/b
 
 Omitting `--auth` preserves the saved account/API choice; `--no-login` avoids signing in again. Repeat your original host flags when updating multiple hosts. Keep any custom `MUSE_BRIDGE_ROOT` override on the `bash` process. Bootstrap uses a managed source snapshot, so rerun bootstrap rather than running `git pull` inside that directory. For a Git clone, use `git pull --ff-only` and rerun `./install.sh --host codex` (or your selected hosts); release bundles are committed, so an unmodified clone needs no build.
 
-Then fully quit and reopen the desktop app. **For the combined picker, reopen with the launcher command above.** A running adapter retains its loaded code; restarting only the chat does not update it. The installer preserves private connection/preferences/routes outside the managed source and refuses to replace locally modified source or conflicting host settings.
+For the MCP plugin, fully quit and reopen the desktop app and start a new local task. For **ChatGPT + Muse**, rerun the companion installer above as well: it uses a versioned copy of the bundle, so pulling the repo or updating the MCP plugin alone does not update an installed shortcut. Then fully quit and launch the companion again. A chat restart does not replace a running server.
 
-If an older build shows **“Couldn't update model settings”** or **“The prototype has four busy or unsaved task workers”**, update and fully relaunch through the script. The latter error was a bridge navigation limit; the fixed runtime lets you open other chats while tasks are running. If only OpenAI models appear after a normal app launch, use the script to enable the combined picker for that session. If setup reports a lock, confirm the corresponding installer/runtime has exited before removing a stale lock; see [launcher troubleshooting](additive-development.md#temporary-desktop-test-on-macos).
+After a native ChatGPT app update, the companion refuses to run until that executable version is verified and supported by the installer. Use the original ChatGPT icon in the meantime. Reinstalling without a supported version does not bypass this check.
+
+Bootstrap preserves private connection settings and refuses to replace locally modified source or conflicting host configuration. If the older additive script reports a worker limit, model-settings error, or Remote writer conflict, use its [development/recovery guide](additive-development.md). Opening the ordinary ChatGPT icon without Muse entries is expected; use the companion when you want the combined picker.
 
 This is an independent community project, not an official Meta or OpenAI desktop integration.

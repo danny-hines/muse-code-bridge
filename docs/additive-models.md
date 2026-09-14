@@ -1,39 +1,46 @@
-# Additive model selection: requirements and status
+# Combined model selection: requirements and status
 
-**Status: both model groups and Muse selection have been user-tested successfully in the macOS desktop. Automatic GUI refresh and broader compatibility remain under test.** The standard installer configures [MCP tools and skills](setup.md); the combined picker uses a separate experimental launcher included with bootstrap. The previous global provider activation remains disabled. See [setup](setup.md) or [development and tests](additive-development.md).
+Status reviewed September 13, 2026. The current experimental path is the [ChatGPT + Muse companion shortcut and shared gateway](shared-gateway-design.md). It uses one native task server, preserves the built-in OpenAI provider, and routes inference by model ID. Its native and live checks passed on `codex-cli 0.154.0-alpha.6.2`; actual desktop/phone Remote behavior and automatic visible picker refresh remain unverified.
+
+The [older additive launcher](additive-development.md) uses a coordinator and per-task workers. Desktop model selection in that implementation was user-tested on September 12, but its Remote architecture was incompatible and is now disabled. Those results must not be presented as shared-gateway acceptance results. The [global provider-replacement prototype](native-provider.md) remains withdrawn.
 
 ## Required behavior
 
-One model picker must contain the existing OpenAI models and the models available through the user's configured Muse authentication. Installing the bridge must preserve the OpenAI account, default model, normal catalog refresh, and existing tasks. No global provider replacement or hardcoded list of OpenAI models is acceptable.
+One picker should contain the existing OpenAI models and the compatible Muse models available through the user's configured authentication. Setup must preserve the OpenAI account, ordinary launch path and existing history. No global provider replacement or hardcoded OpenAI model list is acceptable.
 
-Selecting an OpenAI model must use the normal OpenAI account path. Selecting a Muse model must use the explicitly configured Muse account or API-key path. This must hold when creating, resuming, and forking tasks, and when switching models during a task. A model name in a menu is not evidence of correct routing. Provider errors must not silently trigger a different provider or authentication mode.
+Selecting OpenAI must use native authentication to its original inference endpoint; in the shared mode, those requests pass through the local gateway. Selecting Muse must use the configured Muse account or key. Provider errors must not silently trigger a different provider or authentication mode. A model name in a menu is not evidence of correct routing.
+
+The integration should support task creation, resumption, forking and provider switches while retaining history. Each operation requires evidence in the current implementation. Desktop and Remote should use the same task server rather than competing for writer locks in separate workers.
 
 ## Automatic discovery
 
-- Read OpenAI's current account catalog through the host's model discovery interface; preserve its model metadata and visibility rules.
-- Read Muse's available models through the official CLI's `model/list` using the user's selected authentication mode. Preserve supported capabilities and defaults without overriding the user's OpenAI default.
-- Refresh at startup and automatically during use. Target a refresh interval of at most five minutes while the app is running, plus refresh on reconnect. No repository update, config edit, or manual model registration may be required for a newly available compatible model.
-- Update the visible picker and the routing layer together. A new name in a static catalog is insufficient if the backend still rejects that model.
-- Preserve a user's existing selection while it remains available. If a model disappears or access is lost, report it clearly and request a new selection; do not substitute another model silently.
-- A Muse discovery outage must leave OpenAI available. A last-known catalog may be used during transient discovery failures, with stale state identified. Unavailable credentials and denied access must be surfaced rather than hidden by cached entries.
+- Preserve OpenAI model metadata and visibility when proxying native `/models` discovery; append compatible `muse/<id>` entries without taking over a native identifier.
+- Discover Muse models through the official CLI under the selected authentication mode. The shared gateway refreshes Muse at startup and every five minutes; OpenAI discovery remains native.
+- Keep request validation consistent with discovery. Unavailable Muse models must fail explicitly without cross-provider fallback.
+- Preserve selections while access remains available. Cached model names alone do not prove current access or compatibility.
+- Verify visible picker refresh separately. The target is newly available compatible models appearing within five minutes and after reconnect, without manual registration. The desktop's caching/filtering means this bound has not been established.
 
-“Automatically available” means the provider exposes the model to that user's account and the adapter supports its protocol and required inputs. A public announcement does not grant account access. A new model requiring a new wire format or modality may need an adapter update; show that limitation explicitly. The integration must not promise compatibility it has not established.
+A newly announced model is not necessarily available to the account or compatible with the adapter. New modalities, hosted tools or wire formats may require an adapter update. A Muse discovery failure should not break ordinary OpenAI requests; a gateway failure can affect both providers. Native WebSocket authentication is also a dependency of the shared connection.
 
-## Current integration findings
+## Evidence by implementation
 
-The documented Codex configuration selects one `model_provider` and optionally loads `model_catalog_json` at startup. That is not a documented per-model routing mechanism. The current app-server schema accepts a provider on task start/resume, while a turn's model override does not include a provider field. Both catalog merging and provider routing need a desktop-level integration.
+| Implementation | Evidence | Unverified or unsupported |
+|---|---|---|
+| Shared gateway / companion app | Native fixture catalog, one task server, private desktop defaults, native shell-tool round trip, provider switches, stock-launch recovery; live OpenAI → Muse → OpenAI task using existing logins | Actual desktop/phone Remote use and mobile picker; automatic GUI refresh; broader task resume/fork, auth refresh, advanced tools and automation |
+| Older additive workers | User-confirmed desktop selection; native fixture routing, history, fork, restart, cancellation and private settings tests | Remote is disabled; GUI refresh bound and broader feature coverage remain unverified |
+| Standalone protocol prototype | Responses/tool translation and legacy configuration restoration tests | Provider-replacement activation is withdrawn; fixed catalog; no supported desktop activation |
 
-The installed desktop build includes an internal custom-CLI hook. A local adapter now combines discovery and dispatch using one worker per loaded task. It passes isolated real app-server tests for routing, picker settings saves, provider switches, history, forks, restart/resume, and cancellation. The temporary launcher uses the internal hook for a single app session. After fixing new-chat preference saves and existing-chat settings routing, the user confirmed successful desktop model selection on September 12, 2026. Live Muse text/tool generation also passed. This is not a documented stable plugin API; the launcher remains experimental.
+The shared launcher uses the desktop's internal custom-CLI hook, scoped to that app process, and a native `openai_base_url` override. It does not install a documented stable model-picker plugin API. It checks the native version and keeps the original icon available when an app update is not yet supported.
 
-The additive runtime now gives the native server a live Muse catalog; additions and removals apply to request validation without reinstalling. The older standalone native service still uses its fixed installed list. OpenAI discovery stays with the normal host model catalog. The desktop's filtering and cache behavior still need verification before claiming automatic picker updates.
+## Acceptance before broader release
 
-## Acceptance before release
+1. Verify the actual shared-launch desktop picker and phone Remote UI, including reopen/reconnect and model selection in each client.
+2. Test resumed tasks, forks, cancellation and restarts on the shared gateway; distinguish fixture coverage from real UI acceptance.
+3. Verify newly added/removed model IDs and account access changes at both the catalog and visible picker, including the refresh bound.
+4. Exercise provider outages, expired credentials, native auth refresh and unsupported Muse capabilities without incorrect provider fallback.
+5. Test advanced desktop tools and automation. Muse remains a text and tool-handoff adapter with buffered responses and limited context support.
+6. Verify native app upgrades, companion reinstall/removal and standard-icon recovery. Remote-saved defaults use native persistence and may require an OpenAI selection in the stock app.
 
-1. In the actual desktop picker, show the user's normal OpenAI catalog plus Muse, preserving the original default and authentication.
-2. Complete a text reply and a host tool round trip on each provider. Verify which provider handled each request without logging credentials or private prompts.
-3. Verify resumed tasks, forks, model switches in both directions, cancellation, and app restarts. Provider selection must persist correctly.
-4. Simulate newly available model IDs from both catalogs, without changing source or installed configuration. Confirm they appear and route correctly within the refresh interval. Test removals, changed defaults, pagination, and name collisions too.
-5. Test Muse outages, stale catalogs, expired authentication, and incompatible model capabilities while confirming OpenAI remains usable.
-6. Confirm upgrades and uninstall preserve user settings and restore the standard runtime. Only then offer a one-command native installation.
+See [current gateway limits and verification commands](shared-gateway-design.md#limits-and-remote-verification) for the exact boundary of the tested behavior.
 
-References: [Codex custom providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers), [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference), [app-server protocol](https://learn.chatgpt.com/docs/app-server).
+References: [OpenAI base URL configuration](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers), [app-server protocol](https://learn.chatgpt.com/docs/app-server).

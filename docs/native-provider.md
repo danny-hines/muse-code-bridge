@@ -1,6 +1,6 @@
 # Muse protocol prototype and legacy recovery
 
-**Global provider activation has been withdrawn.** It replaced the normal Astra/OpenAI model options and did not meet the goal of adding Muse alongside them. For current setup, choose the [MCP plugin or experimental combined picker](setup.md). The combined macOS picker has been user-tested; automatic GUI catalog refresh remains under test. This page covers the older standalone protocol service and recovery from its provider-replacement configuration.
+**Global provider activation has been withdrawn.** It replaced the normal Astra/OpenAI model options and did not meet the goal of adding Muse alongside them. For current setup, choose the [MCP plugin or experimental shared-gateway companion](setup.md). The current gateway has native and live request evidence; actual desktop/phone Remote behavior and automatic GUI refresh remain unverified. This page covers the older standalone protocol service and recovery from its provider-replacement configuration.
 
 The adapter has passed Codex app-server protocol tests. Those tests explicitly select the Muse provider; they do not establish end-to-end desktop picker routing. Seeing Muse in the menu proves catalog loading, not correct request routing.
 
@@ -14,7 +14,7 @@ The adapter has passed Codex app-server protocol tests. Those tests explicitly s
 
 This adapter uses a **prompted JSON handoff**, not a raw Meta inference endpoint: it sends the full Codex conversation and tool definitions to a fresh `muse exec` invocation, then translates Muse's structured answer into a Responses message or tool call. Muse's workspace shell, filesystem writes, and web tools are disabled. It runs in a temporary directory, without project rules or foreign personal context. The CLI still owns its native agent prompt/runtime; this does not prove that every Muse-native capability is absent.
 
-The standalone service accepts only a completed Muse terminal result. The newer [additive runtime](additive-development.md) also supports an explicitly validated handoff at a successfully completed Meta response boundary, then intentionally stops Muse's outer loop. Invalid JSON, unknown tools, incomplete runs, and unsupported inputs fail explicitly. The server does not execute requested Codex tools itself, retry model requests automatically, or forward an OpenAI request to Meta.
+The standalone service accepts only a completed Muse terminal result. The [shared gateway](shared-gateway-design.md) and older [additive runtime](additive-development.md) support an explicitly validated handoff at a successfully completed Meta response boundary, then intentionally stop Muse's outer loop. Invalid JSON, unknown tools, incomplete runs, and unsupported inputs fail explicitly. The server does not execute requested Codex tools itself, retry model requests automatically, or forward an OpenAI request to Meta.
 
 ## Development status
 
@@ -54,6 +54,8 @@ rm "$HOME/Library/LaunchAgents/com.muse-code-bridge.native.plist"
 The private `~/.local/share/muse-bridge/native` directory can then be removed. This does not remove Muse login credentials or the MCP plugin.
 
 ## Current limits and evidence
+
+These limits describe the standalone prototype. The shared gateway has its own [capabilities and limits](shared-gateway-design.md#limits-and-remote-verification), including bounded incremental-history handling and OpenAI forwarding.
 
 - **Text only.** Images, screenshots, audio, uploaded files, and provider-hosted tools are rejected. Full browser, connector, image generation, and desktop feature compatibility is not established. Text-based host tools may work but need individual testing.
 - JSON is buffered until Muse finishes, then emitted as Responses SSE events. Heartbeats keep the connection alive; this is not live token streaming.

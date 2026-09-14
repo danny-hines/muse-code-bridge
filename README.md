@@ -1,14 +1,14 @@
 # Muse Code Bridge
 
-Call Muse Code from **Codex / ChatGPT desktop, Hermes, or OpenCode**, using your Muse Code subscription or an explicit pay-as-you-go API key. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation.
+Call Muse Code from **Codex / ChatGPT desktop**, using your Muse Code subscription or an explicit pay-as-you-go API key. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation. **Hermes and OpenCode integrations are works in progress and currently untested in those hosts.**
 
-Choose between Muse as a collaborator through MCP tools and skills, available in all three hosts, or an experimental **combined OpenAI/Muse model picker in Codex / ChatGPT desktop on macOS**. The new [ChatGPT + Muse companion shortcut](docs/shared-gateway-design.md) uses one native task server and a shared model gateway, with the original app icon available for ordinary launches. Live provider switching has passed; phone-side picker behavior still needs verification. The older additive launcher below remains local-only.
+Choose between Muse as a collaborator through MCP tools and skills, or the experimental **combined OpenAI/Muse model picker on macOS**. The [ChatGPT + Muse companion shortcut](docs/shared-gateway-design.md) uses one native task server and a local model gateway. The original ChatGPT icon remains available for ordinary launches. Live provider switching and native tool handoffs have passed; actual mobile Remote behavior and automatic GUI picker refresh remain unverified.
 
-Community integration requiring Muse Code **1.0.3+** and Muse Session Protocol v1. The local setup preflight also passes with Muse Code **1.1.1 (1.1.1-R2514.1)**. This repository contains no credentials and no hosted relay.
+Community integration requiring Muse Code **1.0.3+** and Muse Session Protocol v1. The shared launcher is currently limited to the tested desktop executable, **`codex-cli 0.154.0-alpha.6.2`**. This repository contains no credentials and no hosted relay.
 
 The included skills define two responsibility splits: **`muse-implement`** lets Muse implement and test while the host scopes and verifies; **`muse-review`** lets Muse critique while the host verifies findings and owns fixes. The shared **`muse`** skill supports consultation and session handling. See the [skill catalog, installation, and usage](docs/skills.md).
 
-Codex bundles the complete collection. Hermes/OpenCode accept `--skills implement`, `--skills review`, or `--skills all`. Omit the flag to preserve the previous selection on updates (all on a fresh installation). `--list-skills` lists the catalog without contacting Muse.
+Codex bundles the complete collection. The work-in-progress Hermes/OpenCode installers accept `--skills implement`, `--skills review`, or `--skills all`. Omit the flag to preserve the previous selection on updates (all on a fresh installation). `--list-skills` lists the catalog without contacting Muse.
 
 ## Install
 
@@ -16,7 +16,7 @@ Repository: [danny-hines/muse-code-bridge](https://github.com/danny-hines/muse-c
 
 **New here? Share the [quick setup guide](docs/setup.md)**. It includes a one-command install, copy-ready prompts for an agent, and instructions for switching back.
 
-The bootstrap installs MCP tools, skills, dependencies, and the bundled experimental launcher. It does not activate the combined picker automatically. Legacy provider-replacement commands remain disabled. If an earlier installation hid your models, follow the [recovery instructions](docs/native-provider.md#switching-back-and-updates).
+The bootstrap installs MCP tools, skills, dependencies, and the source/bundles needed by the companion shortcut. It does not install the shortcut or activate the combined picker automatically. Legacy provider-replacement commands remain disabled. If an earlier installation hid your models, follow the [recovery instructions](docs/native-provider.md#switching-back-and-updates).
 
 For **Muse as a collaborator**, run on the computer where you use your host app. Codex is the default:
 
@@ -24,19 +24,11 @@ For **Muse as a collaborator**, run on the computer where you use your host app.
 curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --auth account --login
 ```
 
-For the **new two-shortcut setup**, use the [shared gateway installation guide](docs/shared-gateway-design.md#install-and-use) from a checkout. This is currently version-checked against `codex-cli 0.154.0-alpha.6.2`. It requires no Terminal window while using the app.
+For the **two-shortcut setup**, follow [ChatGPT + Muse installation](docs/shared-gateway-design.md#install-and-use) after bootstrap or from a checkout. The companion icon uses the ChatGPT logo with a Meta badge. Fully quit the app before switching icons; no Terminal window is needed while using it. OpenAI inference also passes through the local gateway in that launch. A full quit followed by the original icon bypasses it; saved Muse tasks or a remotely saved Muse default may need an OpenAI selection.
 
-For the **older local-only model picker on macOS**, complete that setup, fully quit the desktop app, then run:
+The [older additive launcher](docs/additive-development.md) remains available for local development only. It disables Remote to prevent competing child servers and task writer locks. It is not the companion shortcut. See [Remote recovery](docs/additive-development.md#remote-loading-and-open-in-another-app) for affected older sessions.
 
-```sh
-"$HOME/.local/share/muse-bridge/repo/scripts/launch-additive-macos.sh"
-```
-
-Keep that terminal open while using the app. Use this launcher each time you want the combined picker; opening the app normally uses its standard runtime. The launcher finds bootstrap's private Node and Muse installations automatically. No build or separate service installation is needed. See the [quick setup guide](docs/setup.md#select-muse-directly-in-codex--chatgpt-desktop-macos-experimental) for updates, preflight, and an agent prompt, and the [current limits](docs/additive-development.md#limits-before-a-native-release) before trying advanced tasks.
-
-**The older additive launcher supports local tasks only.** For ChatGPT mobile Remote access, fully quit that launcher and reopen the desktop app normally, or use the new shared gateway with the [documented Remote limits](docs/shared-gateway-design.md#limits-and-remote-verification). The Muse MCP plugin and skills remain installed. Earlier additive builds could cause endless mobile loading and “This is open in another app” on desktop; see [Remote recovery](docs/additive-development.md#remote-loading-and-open-in-another-app).
-
-Select another host, or repeat `--host` to install several:
+For the **work-in-progress, currently untested Hermes/OpenCode integrations**, select a host or repeat `--host`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --host hermes
@@ -48,11 +40,12 @@ The bootstrap fetches a commit-pinned source snapshot, reuses compatible tools, 
 
 Use `--login` to run login explicitly or `--no-login` to skip optional login. Meta may still require authentication to download or use Muse. OpenCode's version is detected from its CLI or existing MCP configuration; if unavailable, pass `--opencode-version 1` or `--opencode-version 2` for the beta.
 
-| Host | Integration | Details |
+| Host / mode | Status | Details |
 |---|---|---|
-| Codex / ChatGPT desktop | `muse-codex-bridge` plugin, MCP tools, Muse skill | [Setup and usage](integrations/codex/README.md) |
-| Hermes | `mcp_servers.muse_code_bridge` | [Setup and usage](integrations/hermes/README.md) |
-| OpenCode 1 / 2 beta | Version-aware `muse_code_bridge` MCP entry | [Setup and usage](integrations/opencode/README.md) |
+| Codex / ChatGPT desktop MCP | Tested locally on macOS | [Plugin, tools and skills](integrations/codex/README.md) |
+| ChatGPT + Muse model picker | Experimental; native/live checks passed, mobile unverified | [Companion shortcut](docs/shared-gateway-design.md) |
+| Hermes MCP | Work in progress; currently untested in Hermes | [Development setup](integrations/hermes/README.md) |
+| OpenCode 1 / 2 MCP | Work in progress; currently untested in OpenCode | [Development setup](integrations/opencode/README.md) |
 
 After installing collaborator mode, restart the selected host and start a new **local** conversation in your project. For Codex, fully quit the app (Cmd+Q on macOS) and reopen it, then enable **Muse Code Bridge** in the plugins picker. Ask:
 
@@ -85,7 +78,7 @@ Add `--check` for a read-only preflight or `--login` for Muse login. macOS users
 
 The bootstrap keeps source at `~/.local/share/muse-bridge/repo` and managed dependencies under `runtime/`. This established path is retained across the project rename so existing session metadata stays available. Reruns refuse to overwrite modified source, unrelated directories, or conflicting host entries. Hermes/OpenCode config changes create private backups and preserve unrelated settings and comments.
 
-Rerun the bootstrap to update, using `--no-login` and omitting `--auth` to preserve the current credential choice. For a Git clone, use `git pull --ff-only` and `./install.sh --host …`. Fully quit and relaunch through the experimental launcher to load an updated combined picker. Native replacement flags remain withdrawn; use recovery if an earlier version replaced your provider. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
+Rerun the bootstrap to update, using `--no-login` and omitting `--auth` to preserve the current credential choice. For a Git clone, use `git pull --ff-only` and `./install.sh --host …`. For ChatGPT + Muse, **rerun the companion installer too**, then fully quit and relaunch it: the shortcut uses its own versioned bundle copy. Native app updates need compatibility verification before reinstalling the companion. Native replacement flags remain withdrawn; use recovery if an earlier version replaced your provider. Multiple host installations share one runtime/source location. Include every host you want to reconfigure when updating runtime paths. Removal instructions are in each host guide; don't remove shared source/runtime files while another host uses them.
 
 After updating, wait for current work to finish and fully quit and reopen your host. Existing Codex conversations can retain the old bridge server despite newer files being installed. `muse_status` reports the actual running `bridge_version`, `bridge_build`, and `bridge_started_at` for troubleshooting; older releases omit these diagnostics.
 
@@ -110,7 +103,7 @@ Setup supports two explicit authentication choices:
 
 Omitting `--auth` preserves the saved choice on updates. Both modes run the official Muse Code CLI. This is not a raw API proxy. No OpenAI API key is needed for the bridge; your host's own model usage is separate.
 
-Meta says the subscription applies to the Muse Code credential connected during CLI onboarding. **Additional API keys are billed pay-as-you-go**, and the subscription credential is for Muse Code only. The bridge leaves Muse's credential store intact and does not extract subscription tokens. In account mode it removes inherited `META_API_KEY` because that variable takes precedence over stored credentials. Stored API keys also take precedence over stored browser sessions, so account mode cannot independently guarantee subscription billing. [Subscriptions](https://dev.meta.ai/docs/muse-code/subscriptions), [authentication precedence](https://dev.meta.ai/docs/muse-code/auth).
+The bridge leaves Muse's credential store intact and does not extract subscription tokens. Account mode removes inherited `META_API_KEY`; explicit API mode supplies the selected key file's value to Muse. Stored credentials and the active Muse account still determine entitlement, so account mode cannot independently guarantee subscription billing. Confirm the intended plan in Muse and consult the current [subscriptions](https://dev.meta.ai/docs/muse-code/subscriptions) and [authentication](https://dev.meta.ai/docs/muse-code/auth) documentation.
 
 A successful request establishes that the official Muse CLI route works. It **does not independently establish which billing entitlement Muse used**. The protocol's model catalog is not an account/subscription-status endpoint. Check your active plan and any stored provider configuration in Muse. The status tool reports this distinction explicitly.
 
@@ -132,7 +125,7 @@ Only the mode and key-file path are saved in `~/.local/share/muse-bridge/connect
 
 The choice is shared across hosts using that connection file. Advanced setups can set `MUSE_BRIDGE_CONNECTION_FILE` to a separate absolute path in each host's MCP environment; `MUSE_BRIDGE_ROOT` also relocates the default file. A shell-only override will not automatically reach a desktop process. Keep keys outside managed source, and never put them in a prompt or commit them.
 
-Choosing API authentication does **not** choose a Contributor model. Ask the host to use the exact Contributor model ID returned by `muse_status` if that is what you want; omitted models use Muse's default. Contributor data-use terms still apply. See the [subscription, API, and OpenCode comparison](docs/access-options.md) for current prices and the free OpenCode alternative.
+Choosing API authentication does **not** choose a Contributor model. Ask the host to use the exact Contributor model ID returned by `muse_status` if that is what you want; omitted models use Muse's default. Contributor data-use terms still apply. See the [subscription, API, and OpenCode comparison](docs/access-options.md) for billing distinctions and links to current provider terms and prices.
 
 ## Tools
 
@@ -165,19 +158,20 @@ bootstrap.sh                 Dependency bootstrap and host selection
 install.sh                   Checkout installer and host preflight
 ```
 
-The build produces `dist/muse-server.mjs`, a bundled host configuration helper, and the same MCP server inside the Codex package. Host configuration uses absolute executable paths; no API service needs to stay running outside the host.
+The build produces the shared MCP server, configuration helpers, `dist/muse-shared.mjs`, and `dist/muse-launch.mjs`, plus the same MCP server inside the Codex plugin. The MCP connection and the launcher's gateway run locally; no separately installed gateway login service is required.
 
-**The combined Codex picker is experimental and opt-in.** The [macOS launcher](docs/additive-development.md) routes OpenAI models through normal Codex authentication and Muse models through the bridge's configured CLI authentication. It owns the temporary local Responses endpoint and task workers; there is no separate service to install. Muse currently supports text and tool handoffs, with buffered responses. Model/effort preferences stay in a private bridge file. The older [standalone protocol service](docs/native-provider.md) is retained for development and legacy recovery; its provider-replacement activation is disabled.
+**The combined picker is experimental and opt-in.** The [shared launcher](docs/shared-gateway-design.md) keeps desktop and native Remote on one Codex task server and routes inference by model ID. OpenAI requests retain native authentication; Muse uses the bridge's configured CLI authentication. Muse supports text and tool handoffs with buffered responses. Desktop model/effort defaults stay private to the bridge; Remote settings retain native persistence. The older [additive workers](docs/additive-development.md) and [standalone protocol service](docs/native-provider.md) remain documented separately for development and recovery.
 
-Hermes [external-process provider plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin#external-process-acp-providers) and OpenCode [custom providers](https://opencode.ai/docs/providers/#custom-provider) remain separate, unimplemented native integrations. Their existing MCP integration is unchanged.
+Native model-provider adapters for Hermes and OpenCode are not implemented. Their MCP integrations are works in progress and currently untested in the actual hosts; generated configuration and direct MCP checks are not host acceptance tests.
 
 ## Validation and supported systems
 
-The shell installers target macOS and Linux, arm64 and x64. They need `bash`, `curl`, `tar`, and a SHA-256 utility. Windows is not supported by this launcher.
+The MCP shell installers target macOS and Linux, arm64 and x64. They need `bash`, `curl`, `tar`, and a SHA-256 utility. The companion app and both model-picker launchers are macOS-only. These installers do not support Windows.
 
 - The official Muse process has passed a real two-turn conversation and session-resume check on macOS.
 - The bundled MCP server is verified through an MCP SDK client; the Codex plugin is installed locally.
-- Automated tests cover the protocol, authentication separation, session resumes, and installers, including OpenCode 1 and 2 layouts. Hermes/OpenCode generated launch commands have also connected to the real Muse CLI through an MCP SDK client. Those desktop apps have not been exercised end to end.
+- Automated tests cover the protocol, authentication separation, session resumes, and installers, including OpenCode 1 and 2 layouts. Hermes/OpenCode launch commands have connected through an MCP SDK client, but **Hermes and OpenCode remain works in progress and currently untested in-host**: discovery, approvals, skills, and real tasks need acceptance checks there.
+- The shared gateway passed a live OpenAI → Muse → OpenAI task on September 13, 2026. Native fixture tests cover one task server, a Muse/native-tool round trip, model discovery and standard-launch recovery. Actual desktop/phone Remote use and visible automatic picker refresh remain unverified.
 - API credential handling is tested with fake keys and processes; no paid API request has been used to validate that mode.
 - Fresh dependency installation is tested with download/process fixtures. [GitHub CI](https://github.com/danny-hines/muse-code-bridge/actions/workflows/ci.yml) builds and tests on macOS and Linux.
 
@@ -191,7 +185,7 @@ node scripts/verify-mcp.mjs
 node scripts/verify-hosts.mjs
 ```
 
-The smoke command only performs a handshake and model discovery. `node scripts/smoke.mjs --live` deliberately consumes Muse usage for a two-turn check. Tests use temporary config paths and fake CLIs; they never overwrite your live host configuration. Commit rebuilt `dist/` and plugin files so recipients don't need npm or a build.
+The smoke command only performs a handshake and model discovery. `node scripts/smoke.mjs --live` deliberately consumes Muse usage for a two-turn check. Automated tests use temporary config paths and fixture providers; optional native tests run the installed Codex executable against those fixtures. See [shared gateway verification](docs/shared-gateway-design.md#verification-commands). Commit rebuilt `dist/` and plugin files so an unmodified checkout needs no dependency installation or build just to use the bundled tools.
 
 ## Troubleshooting
 
