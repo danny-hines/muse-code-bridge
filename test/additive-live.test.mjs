@@ -98,6 +98,10 @@ test('real app-server: additive discovery, isolated routes, switches, history, f
   assert.equal(selected.layers.find(l => l.name.type === 'user').config.model, 'openai-fixture-1');
   assert.equal(await readFile(configPath, 'utf8'), config);
   const a = await create('openai-fixture-1'); const b = await create(null);
+  // The real bundled server must report Remote disabled for all three processes.
+  for (const peer of runtime.router.allPeers) {
+    assert.equal((await peer.request('remoteControl/status/read', {})).status, 'disabled');
+  }
   assert.equal(a.modelProvider, 'fixture_openai'); assert.equal(b.modelProvider, museProvider);
   assert.equal(b.model, 'muse/meta-fixture-1');
   assert.equal(b.reasoningEffort, 'low');

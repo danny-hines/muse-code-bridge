@@ -33,6 +33,7 @@ async function fixture(t) {
 test('launcher help is available without desktop dependencies', async () => {
   const result = await exec('/bin/bash', [join(repository, 'scripts/launch-additive-macos.sh'), '--help']);
   assert.match(result.stdout, /--check/); assert.match(result.stdout, /private Node and Muse/);
+  assert.match(result.stdout, /Remote is unavailable/);
 });
 
 test('bootstrap snapshot launcher finds private binaries and custom root with a minimal PATH', { skip: !macOS }, async t => {

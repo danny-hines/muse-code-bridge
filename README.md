@@ -2,7 +2,7 @@
 
 Call Muse Code from **Codex / ChatGPT desktop, Hermes, or OpenCode**, using your Muse Code subscription or an explicit pay-as-you-go API key. Ask for an independent code review, compare approaches, or delegate an implementation, then continue the same Muse conversation.
 
-Choose between Muse as a collaborator through MCP tools and skills, available in all three hosts, or the experimental **combined OpenAI/Muse model picker in Codex / ChatGPT desktop on macOS**. Model selection has been user-tested in the desktop, and a live Muse → Codex tool → Muse round trip has passed. The combined picker uses a separate launcher after bootstrap; automatic GUI refresh and broader desktop compatibility remain under test. Both workflows use the official Muse CLI and preserve your existing OpenAI configuration.
+Choose between Muse as a collaborator through MCP tools and skills, available in all three hosts, or an experimental **combined OpenAI/Muse model picker in Codex / ChatGPT desktop on macOS**. The new [ChatGPT + Muse companion shortcut](docs/shared-gateway-design.md) uses one native task server and a shared model gateway, with the original app icon available for ordinary launches. Live provider switching has passed; phone-side picker behavior still needs verification. The older additive launcher below remains local-only.
 
 Community integration requiring Muse Code **1.0.3+** and Muse Session Protocol v1. The local setup preflight also passes with Muse Code **1.1.1 (1.1.1-R2514.1)**. This repository contains no credentials and no hosted relay.
 
@@ -24,13 +24,17 @@ For **Muse as a collaborator**, run on the computer where you use your host app.
 curl -fsSL https://raw.githubusercontent.com/danny-hines/muse-code-bridge/main/bootstrap.sh | bash -s -- --auth account --login
 ```
 
-For **both providers in the model picker on macOS**, complete that setup, fully quit the desktop app, then run:
+For the **new two-shortcut setup**, use the [shared gateway installation guide](docs/shared-gateway-design.md#install-and-use) from a checkout. This is currently version-checked against `codex-cli 0.154.0-alpha.6.2`. It requires no Terminal window while using the app.
+
+For the **older local-only model picker on macOS**, complete that setup, fully quit the desktop app, then run:
 
 ```sh
 "$HOME/.local/share/muse-bridge/repo/scripts/launch-additive-macos.sh"
 ```
 
 Keep that terminal open while using the app. Use this launcher each time you want the combined picker; opening the app normally uses its standard runtime. The launcher finds bootstrap's private Node and Muse installations automatically. No build or separate service installation is needed. See the [quick setup guide](docs/setup.md#select-muse-directly-in-codex--chatgpt-desktop-macos-experimental) for updates, preflight, and an agent prompt, and the [current limits](docs/additive-development.md#limits-before-a-native-release) before trying advanced tasks.
+
+**The older additive launcher supports local tasks only.** For ChatGPT mobile Remote access, fully quit that launcher and reopen the desktop app normally, or use the new shared gateway with the [documented Remote limits](docs/shared-gateway-design.md#limits-and-remote-verification). The Muse MCP plugin and skills remain installed. Earlier additive builds could cause endless mobile loading and “This is open in another app” on desktop; see [Remote recovery](docs/additive-development.md#remote-loading-and-open-in-another-app).
 
 Select another host, or repeat `--host` to install several:
 

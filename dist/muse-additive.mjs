@@ -8,6 +8,7 @@ import { join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/additive-cli.mjs
+var remoteUnsupported = "The combined Muse picker supports local tasks only. Fully quit Codex / ChatGPT desktop and reopen it normally to use Remote. The Muse MCP plugin remains available in the standard runtime.";
 function appServerIndex(args) {
   const valued = /* @__PURE__ */ new Set(["-c", "--config", "-p", "--profile", "-C", "--cd", "--enable", "--disable"]);
   for (let i = 0; i < args.length; i++) {
@@ -26,6 +27,7 @@ function shouldWrap(args) {
 }
 function assertStdio(args) {
   if (!shouldWrap(args)) throw new Error("The additive prototype requires app-server over stdio.");
+  if (args.some((arg) => arg === "--remote-control" || arg.startsWith("--remote-control="))) throw new Error(remoteUnsupported);
   for (let i = 0; i < args.length; i++) {
     const value = args[i] === "--listen" ? args[++i] : args[i].startsWith("--listen=") ? args[i].slice(9) : null;
     if (value != null && value !== "stdio://") throw new Error("The additive prototype supports only stdio transport.");
@@ -117,7 +119,7 @@ function readConnection(env = process.env) {
 
 // src/build-info.mjs
 var bridgeVersion = true ? "0.1.0" : "source";
-var bridgeBuild = true ? "a47a3f1c15abc3e9" : "source";
+var bridgeBuild = true ? "570a216a74b883bf" : "source";
 
 // src/msp.mjs
 function findMuse(env = process.env) {
@@ -679,6 +681,7 @@ var AdditiveRouter = class {
   }
   async dispatch(method, params) {
     if (this.stopping) throw new Error("Adapter is stopping.");
+    if (method === "remoteControl/enable" || method === "remoteControl/pairing/start") throw new Error(remoteUnsupported);
     await this.workers.get(params.threadId)?.retiring?.catch(() => {
     });
     if (method === "initialize") {
@@ -2120,6 +2123,7 @@ async function createAdditiveRuntime({
 } = {}) {
   if (!executable || !stateRoot || !emit) throw new Error("An explicit real Codex executable, state directory, and output handler are required.");
   assertStdio(args);
+  env = { ...env, CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED: "1" };
   stateRoot = resolve2(stateRoot);
   await mkdir3(stateRoot, { recursive: true, mode: 448 });
   let lock;
@@ -2210,6 +2214,8 @@ var help = `Muse additive routing prototype (not a desktop installer)
 MUSE_ADDITIVE_CODEX_BIN=/absolute/path/to/real/codex node dist/muse-additive.mjs app-server
 
 Supports local stdio only. Other CLI commands pass through to the real Codex.
+Remote is unavailable in this runtime. Fully quit and reopen the app normally
+for mobile Remote access; the Muse MCP plugin remains available there.
 OpenAI settings remain owned by Codex; Muse uses the bridge's existing auth mode.
 MUSE_ADDITIVE_STATE_DIR optionally selects a private routing-state directory.
 Model selection has been tested in the macOS desktop. Automatic picker refresh

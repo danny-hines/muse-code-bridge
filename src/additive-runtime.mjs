@@ -17,6 +17,10 @@ export async function createAdditiveRuntime({ executable, args = ['app-server'],
   if (!executable || !stateRoot || !emit) throw new Error('An explicit real Codex executable, state directory, and output handler are required.');
   // Only stdio is supported. A desktop daemon/WebSocket bypass needs separate work.
   assertStdio(args);
+  // Every native child otherwise reuses the saved Remote enrollment and competes
+  // for the same computer identity. Remote requests bypass this stdio router,
+  // so even the coordinator must stay local. This does not edit the enrollment.
+  env = { ...env, CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED: '1' };
   stateRoot = resolve(stateRoot); await mkdir(stateRoot, { recursive: true, mode: 0o700 });
   let lock;
   try { lock = await open(join(stateRoot, 'runtime.lock'), 'wx', 0o600); }

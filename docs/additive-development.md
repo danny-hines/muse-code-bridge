@@ -1,5 +1,7 @@
 # Additive routing prototype
 
+The newer [shared gateway and Dock shortcut](shared-gateway-design.md) uses one native task server for desktop and Remote. This page documents the older per-task worker implementation, which remains local-only.
+
 This is an experimental launch option, included in the repository and bootstrap source but activated separately. The standard installer configures [MCP tools and skills](setup.md). The launcher adds a local routing layer around Codex's app-server protocol; it does not change the saved OpenAI provider or replace the installed desktop application. New users should follow the [quick setup guide](setup.md).
 
 ## What is implemented
@@ -14,6 +16,7 @@ This is an experimental launch option, included in the repository and bootstrap 
 - The desktop's new-chat picker saves model and reasoning defaults in the adapter's private `preferences.json`. Config reads expose these as session overrides, including named profiles. They survive additive-runtime restarts; launching Codex normally continues to use its original settings. Existing chats retain their own routes. Selecting a model in an existing chat routes `thread/settings/update` to the proper worker and reports the selected Muse identifier back to the desktop.
 - Server requests, including dynamic tool calls and approval requests, get unique routing IDs so simultaneous workers cannot consume one another's replies. Cancellation reaches the worker and the active Muse request.
 - Removed models, discovery failures, and invalid routes fail explicitly. The adapter never changes from Muse to OpenAI, or from subscription authentication to API authentication, as an error fallback.
+- All native child servers, including the coordinator, have Remote transport disabled for the process. Remote enable/pairing requests fail with instructions to reopen the standard app. Saved enrollment is unchanged. Remote requests cannot safely bypass this stdio router.
 
 ## Verification
 
@@ -64,12 +67,28 @@ The app is expected at `/Applications/ChatGPT.app`. Set `MUSE_ADDITIVE_APP_PATH`
 
 The standard runtime cannot resume a Muse-primary task using this custom provider on its own. Reopen the development runtime to continue such a task. Ordinary OpenAI tasks and the existing Muse MCP skills retain their normal setup.
 
+## Remote loading and “open in another app”
+
+The combined picker is incompatible with ChatGPT mobile Remote. Earlier builds inherited saved Remote enrollment in every child app-server, so the coordinator and task workers competed for the same registered computer. Local diagnostics confirmed repeated HTTP 409 conflicts and token-refresh/403 failures. A mobile request could load a task directly in the coordinator or an unrelated worker; the desktop then tried to resume it in its routed worker and received `already has an active writer`. The desktop displays this as **“This is open in another app.”** It does not require another physical device to be using the task.
+
+Remote also bypasses the adapter's merged `model/list` and private provider routes, explaining why its picker does not include Muse. Disabling Remote only in task workers is insufficient: a Remote-enabled coordinator can still acquire task locks outside the router.
+
+To recover:
+
+1. Let current work finish, then **fully quit the desktop app with Cmd+Q**. Closing its window or retrying a task does not stop the adapter's child processes.
+2. **Reopen the app normally**, from the Dock or Applications, to use Remote and ordinary OpenAI tasks. Reopen the affected task and reconnect from the phone. The Muse MCP plugin and skills remain installed.
+3. Use an updated combined-picker launcher only for local tasks. It suppresses Remote for all child processes without changing the saved enrollment, and explains this limitation in its launch output and setup errors.
+
+Do not delete `thread-writer-locks`, task databases, or `additive/routes.json` to clear this error. A live process holds the writer lock; normal shutdown releases it while preserving history. If a normal relaunch still has the problem, check for surviving processes before taking further recovery steps. Muse-primary tasks still require the local additive launcher.
+
+Supporting both the combined picker and Remote requires routing Remote requests through the same provider/ownership layer. This change prevents the conflicting connections; it does not implement Remote support or add Muse to the mobile picker. Regression tests exercise the environment inherited by the coordinator and both worker types, reject Remote setup before it reaches a child, and check disabled Remote status against the real bundled app-server. Phone-to-desktop recovery still requires a normal app relaunch and user verification.
+
 ## Limits before a native release
 
 - The desktop may filter model entries independently of `model/list`. Its own cache also controls when updated options appear. The prototype polls Muse and serves current combined catalogs, but has not established the requested automatic GUI refresh bound.
 - One worker per loaded task costs more local memory and startup work. The four-worker cache target can be exceeded to preserve active or unsaved work; it is not a memory ceiling. Large workspaces and unattended automation still need testing.
 - Cross-provider switches require saved local tasks. Reloading or forking ephemeral tasks across workers is unsupported. Switching while a turn is active, or when the worker has pending requests, background terminals, or other loaded tasks/subagents, is rejected.
-- Some account-wide events, advanced task operations, authentication changes during a session, remote hosts, cloud tasks, shared daemons, and full desktop tool compatibility still need acceptance coverage. Stdio is the only supported transport.
+- Mobile Remote is unsupported and disabled in this runtime; use the standard app for it. Other remote hosts, cloud tasks, shared daemons, some account-wide events, advanced task operations, authentication changes during a session, and full desktop tool compatibility still need acceptance coverage. Stdio is the only supported transport.
 - Model/effort writes are private adapter preferences; other settings continue through Codex. A batch mixing model preferences with unrelated settings is rejected before applying any edit. Global provider/catalog changes, whole-profile replacements, and project-file model writes remain unsupported. Preference writes use the version returned by the bridge (or no `expectedVersion`, as the desktop picker does); an ordinary config-file version is not a preference version. Clearing a preference with `null` restores the original Codex value.
 - Muse inherits the [text/tool adapter limits](native-provider.md#current-limits-and-evidence): buffered JSON handoffs, full-history replay, no image/audio/file inputs, and a conservative context limit. This is not a transparent implementation of every Codex feature.
 

@@ -49,6 +49,10 @@ For Hermes or OpenCode, add `--host hermes` or `--host opencode`. Their supporte
 
 ## Select Muse directly in Codex / ChatGPT desktop (macOS, experimental)
 
+**New: [ChatGPT + Muse Dock shortcut](shared-gateway-design.md).** The companion app uses a shared inference gateway and one native task server. The ordinary ChatGPT icon remains available, and no Terminal window is needed. Native and live model-switch tests passed; actual mobile picker visibility still needs a phone-side check. Follow that guide for the two-shortcut setup from a checkout.
+
+The older script-based setup below supports **local tasks only**. Remote access from the ChatGPT mobile app is unavailable while using that additive launcher. For Remote, fully quit it and reopen the desktop app normally; the Muse MCP plugin and skills remain available. The launcher does not change saved Remote enrollment. See [recovery for mobile loading and task locks](additive-development.md#remote-loading-and-open-in-another-app).
+
 Run the bootstrap above first. It includes the compiled adapter and launcher, so no Git clone, npm build, or separate service installation is needed. If you already installed the bridge, use the update command below to fetch the current launcher.
 
 After setup and Muse login, **fully quit Codex / ChatGPT desktop with Cmd+Q**. Then run:

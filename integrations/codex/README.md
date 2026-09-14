@@ -28,6 +28,8 @@ For Muse as the primary model, use the separate [experimental combined picker on
 
 For a clone, run `./scripts/launch-additive-macos.sh` from the checkout. Use the launcher each time you want the combined picker and keep its terminal open. The MCP plugin and skills remain available. No separate service or provider-replacement command is needed. The adapter supports text and tool handoffs; automatic GUI catalog refresh and full desktop feature compatibility still need validation.
 
+**The combined picker is local-only.** For ChatGPT mobile Remote access, fully quit the desktop app and reopen it normally. Older additive builds could compete for the same Remote computer identity and lock tasks in another child process. See [Remote recovery](https://github.com/danny-hines/muse-code-bridge/blob/main/docs/additive-development.md#remote-loading-and-open-in-another-app). The MCP plugin remains installed in the standard runtime.
+
 ## Update and remove
 
 Rerun the same bootstrap command, or run `git pull --ff-only` and `./install.sh --host codex` in your clone. Keep the checkout at the same path. When current work has finished, **fully quit Codex (Cmd+Q on macOS), reopen it, and start a new local conversation**. Closing a window or reading the updated skill file does not replace an already running bridge server.

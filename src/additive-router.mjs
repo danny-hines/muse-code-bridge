@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { museProvider, isMuseModel, museModelName } from './additive-catalog.mjs';
+import { remoteUnsupported } from './additive-cli.mjs';
 
 const lifecycle = new Set(['thread/start', 'thread/resume', 'thread/fork']);
 const resumeKeys = ['approvalPolicy', 'approvalsReviewer', 'baseInstructions', 'config', 'cwd', 'developerInstructions', 'permissions', 'personality', 'runtimeWorkspaceRoots', 'sandbox', 'serviceTier'];
@@ -243,6 +244,9 @@ export class AdditiveRouter {
   }
   async dispatch(method, params) {
     if (this.stopping) throw new Error('Adapter is stopping.');
+    // Remote must never connect directly to one of our native child servers.
+    // Reject before forwarding so an attempted setup cannot change enrollment.
+    if (method === 'remoteControl/enable' || method === 'remoteControl/pairing/start') throw new Error(remoteUnsupported);
     // An eviction holds the worker until it has stopped. A concurrent resume or
     // turn then reopens the saved task instead of writing to a closing process.
     await this.workers.get(params.threadId)?.retiring?.catch(() => {});

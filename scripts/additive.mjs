@@ -12,6 +12,8 @@ const help = `Muse additive routing prototype (not a desktop installer)
 MUSE_ADDITIVE_CODEX_BIN=/absolute/path/to/real/codex node dist/muse-additive.mjs app-server
 
 Supports local stdio only. Other CLI commands pass through to the real Codex.
+Remote is unavailable in this runtime. Fully quit and reopen the app normally
+for mobile Remote access; the Muse MCP plugin remains available there.
 OpenAI settings remain owned by Codex; Muse uses the bridge's existing auth mode.
 MUSE_ADDITIVE_STATE_DIR optionally selects a private routing-state directory.
 Model selection has been tested in the macOS desktop. Automatic picker refresh

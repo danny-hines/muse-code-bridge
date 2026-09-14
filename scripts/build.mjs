@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
-const inputs = ['package.json', 'package-lock.json', 'scripts/build.mjs',
+const inputs = ['package.json', 'package-lock.json', 'scripts/build.mjs', 'scripts/shared.mjs', 'scripts/launch-shared-macos.mjs',
   ...(await readdir('src')).filter(name => name.endsWith('.mjs')).map(name => join('src', name))].sort();
 const fingerprint = createHash('sha256');
 for (const path of inputs) fingerprint.update(path).update('\0').update(await readFile(path)).update('\0');
@@ -13,7 +13,7 @@ const bridgeBuild = fingerprint.digest('hex').slice(0, 16);
 await mkdir('plugins/muse-codex-bridge/scripts', { recursive: true });
 await mkdir('dist', { recursive: true });
 const result = await build({
-  entryPoints: { 'muse-server': 'src/server.mjs', 'muse-native-server': 'scripts/native-server.mjs', 'muse-native': 'scripts/native.mjs', 'muse-additive': 'scripts/additive.mjs', 'configure-host': 'scripts/configure-host.mjs', 'configure-auth': 'scripts/configure-auth.mjs', 'configure-skills': 'scripts/configure-skills.mjs' },
+  entryPoints: { 'muse-server': 'src/server.mjs', 'muse-native-server': 'scripts/native-server.mjs', 'muse-native': 'scripts/native.mjs', 'muse-additive': 'scripts/additive.mjs', 'muse-shared': 'scripts/shared.mjs', 'muse-launch': 'scripts/launch-shared-macos.mjs', 'configure-host': 'scripts/configure-host.mjs', 'configure-auth': 'scripts/configure-auth.mjs', 'configure-skills': 'scripts/configure-skills.mjs' },
   outdir: 'dist', outExtension: { '.js': '.mjs' },
   bundle: true, platform: 'node', format: 'esm', target: 'node22',
   mainFields: ['module', 'main'],

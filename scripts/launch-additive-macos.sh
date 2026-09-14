@@ -15,6 +15,8 @@ Bootstrap's private Node and Muse tools are discovered automatically.
 Overrides: MUSE_ADDITIVE_APP_PATH, MUSE_BRIDGE_ROOT, MUSE_BRIDGE_NODE_BIN,
 MUSE_BRIDGE_EXECUTABLE, MUSE_ADDITIVE_STATE_DIR.
 Keep the terminal open. Launch the app normally to use the standard runtime.
+Local tasks only: Remote is unavailable with the combined picker.
+For mobile Remote access, fully quit and reopen the app normally.
 HELP
     exit 0 ;;
 esac
@@ -68,5 +70,6 @@ chmod 700 "$launch_dir/codex"
 export CODEX_CLI_PATH="$launch_dir/codex"
 export CODEX_APP_SERVER_FORCE_CLI=1
 echo 'Launching the additive prototype for this app session. Keep this terminal open.'
+echo 'Local tasks only: Remote is unavailable in this session. Fully quit and reopen normally for mobile Remote access; the Muse MCP plugin remains installed.'
 echo 'OpenAI and Muse selection has been tested on macOS. Automatic picker refresh and broader desktop compatibility remain under test.'
 "$app_dir/Contents/MacOS/$app_executable"
